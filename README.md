@@ -1,6 +1,7 @@
 # M5S_WxBeacon2
 
-https://video.twimg.com/ext_tw_video/1560544925522923520/pu/vid/480x270/xFEbhM52ZW1gTFTP.mp4
+
+https://user-images.githubusercontent.com/26270227/186464005-bfc6b1c4-3f5c-4e7f-b2bc-fb4b9d4b0df4.mp4
 
 定期的に WxBeacon2 から情報を取得し、ティッカーに表示、ポン子ちゃんアバターが喋ります。
 
