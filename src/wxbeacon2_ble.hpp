@@ -150,11 +150,6 @@ class WxBeacon2Client
     /// @}
     
   protected:
-    bool correctDeviceName();
-    bool correctDeviceInformation();
-    bool correctADVSetting();
-    bool correctTimeInformation();
-
     /*!
       @brief get rows from 1 page.
       @param page Read page no.

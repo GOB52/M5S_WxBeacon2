@@ -18,7 +18,7 @@ Avatar::Avatar()
     _face->createFromBmp(ponko_face_bmp, ponko_face_bmp_len);
 
     auto mc = new LGFX_Sprite();
-    assert(mc && "mo is nullptr");
+    assert(mc && "mc is nullptr");
     mc->createFromBmp(ponko_mouth_close_bmp, ponko_mouth_close_bmp_len);
     _mouth[Close] = mc;
     

@@ -1,7 +1,6 @@
 /*!
   @file   wxbeacon2.hpp
   @brief  WxBeacon2 definitions [OMRON 2JCIE-BL01]
-  @note independent
 */
 #ifndef WXBEACON2_HPP
 #define WXBEACON2_HPP
@@ -462,7 +461,7 @@ class WxBeacon2
 
         constexpr static uint16_t DEFAULT_VALUE = 300; // 300 sec => 5 min
         
-        /// @name Comvert
+        /// @name Convert
         /// @{
         explicit operator std::string() const { return std::string(_array.begin(), _array.end()); }
         bool from(const std::string& v);
@@ -483,7 +482,7 @@ class WxBeacon2
 
         explicit TimeInformation(time_t t = 0) : _time32(static_cast<uint32_t>(t)) {}
         
-        /// @name Comvert
+        /// @name Convert
         /// @{
         explicit operator std::string() const { return std::string(_array.begin(), _array.end()); }
         bool from(const std::string& v);
@@ -505,7 +504,7 @@ class WxBeacon2
 
         explicit LED(uint8_t d = DURATION_MIN) : _duration(d) {}
         
-        /// @name Comvert
+        /// @name Convert
         /// @{
         explicit operator std::string() const { return std::string(_array.begin(), _array.end()); }
         /// @}
@@ -548,7 +547,7 @@ class WxBeacon2
         bool hasError() const { return _sensor || _cpu || _battery; }
         void clear() { _array = {}; }
         
-        /// @name Comvert
+        /// @name Convert
         /// @{
         explicit operator std::string() const { return std::string(_array.begin(), _array.end()); }
         bool from(const std::string& v);
@@ -585,7 +584,7 @@ class WxBeacon2
         bool withDataRecordingMode() const { return WxBeacon2::withDataRecordingMode(beaconMode()); }
         bool withoutDataRecordingMode() const { return !WxBeacon2::withDataRecordingMode(beaconMode()); }
 
-        /// @name Comvert
+        /// @name Convert
         /// @{
         explicit operator std::string() const { return std::string(_array.begin(), _array.end()); }
         bool from(const std::string& v);

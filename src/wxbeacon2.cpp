@@ -1,7 +1,6 @@
 /*!
   @file   wxbeacon2.cpp
   @brief  WxBeacon2 definitions [OMRON 2JCIE-BL01]
-  @note hardware independent
 */
 #include "wxbeacon2.hpp"
 #include <algorithm>
