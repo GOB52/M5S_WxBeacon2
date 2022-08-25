@@ -59,7 +59,7 @@ Windows bitmap 32 px x 32 px 1 bpp (2色) パレット 0 番は透過色。テ�
 
 
 #### ソースファイル化
-全てのリソースについて行ってください。 ponk_face.bmp における例を示します。
+全てのリソースについて行ってください。 ponko_face.bmp における例を示します。
 
 ```
 xxd -i ponko_face.bmp ./src/res/ponko_face.cpp
