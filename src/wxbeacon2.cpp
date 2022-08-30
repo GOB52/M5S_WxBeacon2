@@ -83,7 +83,7 @@ bool WxBeacon2::MeasurementInterval::from(const std::string& v)
 }
 
 //
-WxBeacon2::Data::Data(std::time_t pageTime, uint16_t interval, const WxBeacon2::ResponseData& rd)
+WxBeacon2::Data::Data(const std::time_t pageTime, const uint16_t interval, const WxBeacon2::ResponseData& rd)
         :  _time(pageTime + rd._data._row * interval)
         , _temperature(rd._data._temperature)
         , _relativeHumidity(rd._data._relativeHumidity)
@@ -122,6 +122,17 @@ const WxBeacon2::ADVSetting WxBeacon2::ADVSetting::DEFAULT_SETTING =
 
 //
 bool WxBeacon2::ADVSetting::from(const std::string& v)
+{
+    return string2array(_array, v);
+}
+
+//
+bool WxBeacon2::GenericAccesssService::Appearance::from(const std::string& v)
+{
+    return string2array(_array, v);
+}
+
+bool WxBeacon2::GenericAccesssService::PeripheralPreferredConnectionParameters::from(const std::string& v)
 {
     return string2array(_array, v);
 }

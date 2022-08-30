@@ -17,7 +17,8 @@ class WxBeacon2
   public:
     /// @name Constants
     /// @{
-    constexpr static uint16_t COMPANY_ID = 0x02d5; // Company ID of OMRON
+    constexpr static uint16_t COMPANY_ID = 0x02d5; // Company ID of OMRON Corporation
+    constexpr static uint16_t IBEACON_COMPANY_ID = 0x004c; // Company ID of Apple, Inc.
     constexpr static uint16_t PAGE_MAX = 2048; // [0-2047]
     constexpr static uint8_t ROW_MAX = 13; // [0-12]
     constexpr static uint16_t SEQUENCE_MAX = 255; // [0-255]
@@ -86,8 +87,7 @@ class WxBeacon2
                 (ROW_MAX - srow) + (erow + 1)  + (ROW_MAX * ((epage + PAGE_MAX  - spage - 1) % PAGE_MAX) ) :
                 (erow >= srow) ? erow - srow + 1 : 0 /* Invalid srow,erow*/;
     }
-    
-    // Sensor data type
+
     /*!
       @brief Temperature
       @note Unit: 0.01 degC
@@ -239,7 +239,7 @@ class WxBeacon2
         uint16_t raw() const { return _v; }
       private:
         uint16_t _v;
-    } __attribute__((__packed__));    
+    } __attribute__((__packed__));
 
     // Sensor Service (Service UUID: 0x3000)
     /*!
@@ -311,7 +311,7 @@ class WxBeacon2
     };
 
     /*!
-      @brief Request page 0x3003
+      @brief Request page
       @note Property: READ, WRITE
     */
     union RequestPage
@@ -348,7 +348,6 @@ class WxBeacon2
             Retrieving,           // 0x00: Retrieving 
             Completed,            // 0x01: Completed 
             FailedToRetrieveData, // 0x02: Failed to retrieve data
-            Error, // Other errors
         };
         
         std::array<uint8_t, 5> _array;
@@ -357,11 +356,6 @@ class WxBeacon2
             UpdateFlag _updateFlag;
             uint32_t _time32; // created time of page. UNIX TIME Unit: 1 sec
         } __attribute__((__packed__));
-
-        ResponseFlag() : _array{} { _updateFlag = UpdateFlag::Error; }
-        explicit ResponseFlag(const std::string& v) : _array{} { from(v); }
-
-        UpdateFlag updateFlag() const { return _updateFlag; }
 
         /// @name Convert
         /// @{
@@ -418,7 +412,7 @@ class WxBeacon2
         Heatstroke _heatstroke;
         BatteryVoltage16 _batteryVoltage;
 
-        Data(std::time_t pageTime, uint16_t interval, const ResponseData& rd);
+        Data(const std::time_t pageTime, const uint16_t interval, const ResponseData& rd);
         Data(const time_t t, const int16_t tmp, const int16_t hum, const int16_t light, const int16_t uv, const int16_t presure, const int16_t noise, const int16_t dis, const int16_t heat, const uint16_t battery16)
                 : _time(t)
                 , _temperature(tmp)
@@ -540,7 +534,7 @@ class WxBeacon2
             uint8_t _cpu;
             uint8_t _battery;
             uint8_t _rfu;
-        };
+        } __attribute__((__packed__)); 
         
         ErrorStatus() : _array{} {}
 
@@ -593,10 +587,69 @@ class WxBeacon2
         const static ADVSetting DEFAULT_SETTING;
     } __attribute__((__packed__));
 
+
+    //! @brief Generic Access Service (Service UUID : 0x1800)
+    struct GenericAccesssService
+    {
+        constexpr static uint16_t UUID = 0x1800;
+        //! @brief Device name
+        struct DeviceName
+        {
+            constexpr static uint16_t UUID = 0x2A00;
+        };
+        //! @brief Appearance
+        union Appearance
+        {
+            constexpr static uint16_t UUID = 0x2A01;
+            std::array<uint8_t, 2> _array;
+            uint16_t _category;
+
+            bool from(const std::string& v);
+        };
+        //! @brief Peripheral preferred connection parameters
+        union PeripheralPreferredConnectionParameters
+        {
+            constexpr static uint16_t UUID = 0x2A04;
+            std::array<uint8_t, 8> _array;
+            struct
+            {
+                uint16_t _intervalMin; // Minimum connection interval (Unit 1.25 ms)
+                uint16_t _intervalMax; // Maximum connection interval (Unit 1.25 ms)
+                uint16_t _slaveLatency; // Slave Latency
+                uint16_t _timeout; // Connection supervision timeout multiplier
+            } __attribute__((__packed__));
+
+            bool from(const std::string& v);
+        };
+    };
+
+    //! @brief Device Information Service (Service UUID : 0x180A)
+    struct DeviceInformationService
+    {
+        constexpr static uint16_t UUID = 0x180A;
+        //! @brief Model number
+        struct ModelNumber { constexpr static uint16_t UUID = 0x2A24; };
+        //! @brief Serial number
+        struct SerialNumber { constexpr static uint16_t UUID = 0x2A25; };
+        //! @brief Firmware revision
+        struct FirmwareRevision { constexpr static uint16_t UUID = 0x2A26; };
+        //! @brief Hardware revision
+        struct HardwareRevision { constexpr static uint16_t UUID = 0x2A27; };
+        //! @brief Manufacturer name
+        struct ManufacturerName { constexpr static uint16_t UUID = 0x2A29; };
+    };
+    
     /*! @brief Advertise data */
     class AdvertiseData
     {
       public:
+        // ADV 2 length
+        constexpr static size_t LENGTH_A = 29 - 5 + 1;
+        constexpr static size_t LENGTH_B = 30 - 2 + 1;
+        constexpr static size_t LENGTH_C = 25 - 9 + 1;
+        constexpr static size_t LENGTH_D = 26 - 5 + 1;
+        constexpr static size_t LENGTH_E = 26 - 5 + 1;
+
         /*! @brief  (A) Beacon */
         struct A
         {
@@ -742,22 +795,6 @@ class WxBeacon2
             C _c;
             D _d;
             E _e;
-        };
-    };
-
-    // Device Information Service (Service UUID: 0x180A)
-    /*! @brief Device Information */
-    struct DeviceInformation
-    {
-        std::string modelNumber;
-        std::string serialNumber;
-        std::string firmwareRevision;
-        std::string hardwareRevision;
-        std::string manufacturerName;
-
-        bool valid() const
-        {
-            return !modelNumber.empty() && !serialNumber.empty() && !firmwareRevision.empty() && !hardwareRevision.empty() && !manufacturerName.empty();
         };
     };
 };

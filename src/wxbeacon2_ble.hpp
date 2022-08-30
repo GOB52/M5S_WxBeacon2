@@ -22,21 +22,29 @@ class WxBeacon2AdvertiseCallbacks: public NimBLEAdvertisedDeviceCallbacks
     void onResult(NimBLEAdvertisedDevice* device) override;
 
     void clear();
-    bool detected() { return static_cast<uint64_t>(_address) != 0ULL; }
+    bool detected() const { return static_cast<uint64_t>(_address) != 0ULL; }
 
     const NimBLEAddress& address() const { return _address; }
     const WxBeacon2::AdvertiseData& data() const { return _data; }
 
-    static WxBeacon2::ADVFormat format(std::string& name)
+    static WxBeacon2::ADVFormat format(const std::string& name, const size_t mlen)
     {
-        if(name == "IM") return WxBeacon2::ADVFormat::D;
-        if(name == "EP") return WxBeacon2::ADVFormat::E;
-        if(name == "Env") return WxBeacon2::ADVFormat::C;
+        if(name == "IM" && mlen == WxBeacon2::AdvertiseData::LENGTH_D) return WxBeacon2::ADVFormat::D;
+        if(name == "EP" && mlen == WxBeacon2::AdvertiseData::LENGTH_E) return WxBeacon2::ADVFormat::E;
+        if(name == "Env")
+        {
+            switch(mlen)
+            {
+            case WxBeacon2::AdvertiseData::LENGTH_A: return WxBeacon2::ADVFormat::A;
+            case WxBeacon2::AdvertiseData::LENGTH_B: return WxBeacon2::ADVFormat::B;
+            case WxBeacon2::AdvertiseData::LENGTH_C: return WxBeacon2::ADVFormat::C;
+            }
+        }
         return WxBeacon2::ADVFormat::Unknown;
     }
     
   private:
-    bool validName(std::string& name) const { return name == "IM" || name == "EP" || name == "Env"; }
+    bool validName(const std::string& name) const { return name == "IM" || name == "EP" || name == "Env"; }
 
   private:
     NimBLEAddress _address; // detected device addrress
@@ -66,6 +74,7 @@ class WxBeacon2Client
         WxBeacon2Client* _wc;
     };
 
+    //! @brief Unixtime of page 
     struct PageTime
     {
         uint16_t _page;
@@ -91,7 +100,7 @@ class WxBeacon2Client
     }
     /// @}
 
-    /// @name Get value
+    /// @name Get value from custom service
     /// @{
     /*! @brief get latest data */
     bool getLatestData(WxBeacon2::LatestData& ldata);
@@ -101,7 +110,9 @@ class WxBeacon2Client
     bool getRequestPage(WxBeacon2::RequestPage& req);
     /*! @brief get response flag */
     bool getResponseFlag(WxBeacon2::ResponseFlag& flag);
-    // get recording data.
+    /*! @brief get single response data */
+    bool getResponseData(WxBeacon2::ResponseData& data);
+    // @brief get recording data form pageFrom,rowFrom to latest.
     bool getResponseData(DataVector& v, const uint16_t pageFrom = 0, const uint8_t rowFrom = 0);
     /*! @brief get measurement interval */
     bool getMeasurementInterval(WxBeacon2::MeasurementInterval& mi);
@@ -113,6 +124,30 @@ class WxBeacon2Client
     bool getPageCreatedTime(std::vector<PageTime>& vec, const uint16_t from, const uint16_t to);
     /*! @brief get advertise setting */
     bool getADVSetting(WxBeacon2::ADVSetting& setting);
+    /// @}
+
+    /// @name Get value from Generic access service
+    /// @{
+    /*! @brief get device name */
+    bool getDeviceName(std::string& dname);
+    /*! @brief get appearance */
+    bool getAppearance(WxBeacon2::GenericAccesssService::Appearance& app);
+    /*! @brief get appearance */
+    bool getPeripheralPreferredConnectionParameters(WxBeacon2::GenericAccesssService::PeripheralPreferredConnectionParameters& params);
+    /// @}
+
+    /// @name Get value from Device information service
+    /// @{
+    /*! @brief get model number string */
+    bool getModelNumber(std::string& mnum);
+    /*! @brief get serial number string */
+    bool getSerialNumber(std::string& snum);
+    /*! @brief get firmware revision string */
+    bool getFirmwareRevision(std::string& frev);
+    /*! @brief get hardware revision string */
+    bool getHardwareRevision(std::string& hrev);
+    /*! @brief get manufacturer name string */
+    bool getManufacturerName(std::string& mname);
     /// @}
     
     /// @name Set value

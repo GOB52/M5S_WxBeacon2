@@ -31,7 +31,7 @@ template<typename C, typename Ret, typename... Args> struct has_from<C, Ret(Args
 };
 
 /*!
-  @brief get characteristics value
+  @brief get custom characteristics value
   @tparam T value of type
   @param client Client
   @param value store target
@@ -39,7 +39,7 @@ template<typename C, typename Ret, typename... Args> struct has_from<C, Ret(Args
   @retval true Succeed
   @retval false Failed
  */
-template<typename T> bool getClientValue(NimBLEClient* client, T& value, uint16_t gatt16)
+template<typename T> bool getCustomCharacteristicValue(NimBLEClient* client, T& value, const uint16_t gatt16)
 {
     static_assert(has_from<T, bool(const std::string&)>::value, "T must be has bool from(const std::string&)");
     assert(client);
@@ -59,7 +59,38 @@ template<typename T> bool getClientValue(NimBLEClient* client, T& value, uint16_
         printf("\n");
     }
 #endif
+    return value.from(v);
+}
 
+/*!
+  @brief get assigned characteristics value
+  @tparam T value of type
+  @param client Client
+  @param value store target
+  @param gat16 16bit uuid of custom UUID
+  @retval true Succeed
+  @retval false Failed
+ */
+template<typename T> bool getCharacteristicValue(NimBLEClient* client, T& value, const uint16_t sUUID, const uint16_t cUUID)
+{
+    static_assert(has_from<T, bool(const std::string&)>::value, "T must be has bool from(const std::string&)");
+    assert(client);
+
+    auto sv = client->getService(NimBLEUUID(sUUID));
+    if(!sv) { WB2_LOGE("Service not exists. %x", sUUID); return false; }
+    auto v = sv->getValue(NimBLEUUID(cUUID));;
+
+    WB2_LOGI("GATT:%x/%x len:%zu / %zu:", sUUID, cUUID, v.length(), v.size());
+#if defined(WB2_LOG_LEVEL) && WB2_LOG_LEVEL >= ESP_LOG_INFO
+    if(v.length() > 0)
+    {
+        for(size_t i = 0; i < v.length(); ++i)
+        {
+            printf("%02x", v[i]);
+        }
+        printf("\n");
+    }
+#endif
     return value.from(v);
 }
 //
@@ -75,17 +106,18 @@ void WxBeacon2AdvertiseCallbacks::clear()
 void WxBeacon2AdvertiseCallbacks::onResult(NimBLEAdvertisedDevice* device)
 {
     auto dname = device->getName();
+    auto mdata = device->getManufacturerData();
     bool detected = false;
-    WB2_LOGV("devicename:%s", dname.c_str());
-    if(validName(dname))
+    WB2_LOGV("devicename:%s companyID:%x", dname.c_str(), mdata.empty() ? 0 : *(const uint16_t*)mdata.data());
+    if(validName(dname) && !mdata.empty() && *(const uint16_t*)mdata.data() == WxBeacon2::COMPANY_ID)
     {
         WB2_LOGI("Device <%s> ----------------", device->toString().c_str());
         WB2_LOGI("  Service UUID : %s", device->haveServiceUUID() ? device->getServiceUUID().toString().c_str() : "None");
         WB2_LOGI("  Address : %s", device->getAddress().toString().c_str());
         WB2_LOGI("  Name : %s", device->getName().c_str());
-        
-        auto fmt = format(dname);
-        _data.from(fmt, reinterpret_cast<const uint8_t*>(device->getManufacturerData().data()), device->getManufacturerData().length());
+
+        auto fmt = format(dname, mdata.length());
+        _data.from(fmt, reinterpret_cast<const uint8_t*>(mdata.data()), mdata.length());
         
         // EP
         if(fmt == WxBeacon2::ADVFormat::E)
@@ -238,17 +270,17 @@ WxBeacon2Client::~WxBeacon2Client()
 // Sensor Service (Service UUID: 0x3000)
 bool WxBeacon2Client::getLatestData(WxBeacon2::LatestData& ldata)
 {
-    return getClientValue(_client, ldata, WxBeacon2::LatestData::UUID);
+    return getCustomCharacteristicValue(_client, ldata, WxBeacon2::LatestData::UUID);
 }
 
 bool WxBeacon2Client::getLatestPage(WxBeacon2::LatestPage& lpage)
 {
-    return getClientValue(_client, lpage, WxBeacon2::LatestPage::UUID);
+    return getCustomCharacteristicValue(_client, lpage, WxBeacon2::LatestPage::UUID);
 }
 
 bool WxBeacon2Client::getRequestPage(WxBeacon2::RequestPage& req)
 {
-    return getClientValue(_client, req, WxBeacon2::RequestPage::UUID);
+    return getCustomCharacteristicValue(_client, req, WxBeacon2::RequestPage::UUID);
 }
 
 bool WxBeacon2Client::requestPage(uint16_t page, uint8_t row)
@@ -265,7 +297,12 @@ bool WxBeacon2Client::requestPage(uint16_t page, uint8_t row)
 
 bool WxBeacon2Client::getResponseFlag(WxBeacon2::ResponseFlag& flag)
 {
-    return getClientValue(_client, flag, WxBeacon2::ResponseFlag::UUID);
+    return getCustomCharacteristicValue(_client, flag, WxBeacon2::ResponseFlag::UUID);
+}
+
+bool WxBeacon2Client::getResponseData(WxBeacon2::ResponseData& data)
+{
+    return getCustomCharacteristicValue(_client, data, WxBeacon2::ResponseData::UUID);
 }
 
 bool WxBeacon2Client::getResponseData(DataVector& vec, const uint16_t pageFrom, const uint8_t rowFrom)
@@ -330,20 +367,20 @@ size_t WxBeacon2Client::_getResponseData(DataVector& vec, const uint16_t page, c
     while(rcnt--)
     {
         // 1) Write request page
-        WB2_LOGV("Request %u,%u", page, lastRow); // row 常に 0?
+        WB2_LOGV("Request %u,%u", page, lastRow);
         if(!requestPage(page, lastRow)) { WB2_LOGE("Failed to request"); continue; }
 
         // 2) Read response flag
-        WxBeacon2::ResponseFlag flag; // updateFlag() is ERROR
+        WxBeacon2::ResponseFlag flag = { (uint8_t)WxBeacon2::ResponseFlag::UpdateFlag::FailedToRetrieveData };
         do
         {
             delay(50); // Avoid "Controller not ready to receive packets" in ble_hci_trans_hs_acl_tx()
             if(!getResponseFlag(flag)) { WB2_LOGE("Failed to get respose flag"); break; }
-        }while(flag.updateFlag() == WxBeacon2::ResponseFlag::UpdateFlag::Retrieving);
+        }while(flag._updateFlag == WxBeacon2::ResponseFlag::UpdateFlag::Retrieving);
 
-        WB2_LOGD("updateFlag %x", (uint8_t)flag.updateFlag());
+        WB2_LOGD("updateFlag %x", flag._updateFlag);
         
-        if(flag.updateFlag() != WxBeacon2::ResponseFlag::UpdateFlag::Completed) { WB2_LOGD("flag is not completed"); continue; }
+        if(flag._updateFlag != WxBeacon2::ResponseFlag::UpdateFlag::Completed) { WB2_LOGD("flag is not completed"); continue; }
 
         WB2_LOGI("read data. created time: %u", flag._time32);
         
@@ -358,14 +395,14 @@ size_t WxBeacon2Client::_getResponseData(DataVector& vec, const uint16_t page, c
             if(v.empty()) { WB2_LOGE("Failed to get response data"); }
             
             WxBeacon2::ResponseData rd;
-            if(!rd.from(v) || rd._data._row >= WxBeacon2::ROW_MAX) { break; }
+            if(!rd.from(v) || rd._data._row >= WxBeacon2::ROW_MAX) { break; } // Invalid data
 
             if(rd._data._row >= firstRow && rd._data._row <= lastRow)
             {
                 WB2_LOGV("store row:%u", rd._data._row);
                 tmp.push_back(rd);
             }
-            if(rd._data._row <= firstRow || rd._data._row == 0) { break; }
+            if(rd._data._row <= firstRow || rd._data._row == 0) { break; } // No more rows on the page
         }
 
         // Sort by row asend and push back Data.
@@ -411,17 +448,17 @@ bool WxBeacon2Client::getPageCreatedTime(std::vector<PageTime>& vec, const uint1
                 WB2_LOGD("req : %u, %u", req._page, req._row);
                 #endif
                 delay(50); // Avoid "Controller not ready to receive packets" in ble_hci_trans_hs_acl_tx()
-                
-                WxBeacon2::ResponseFlag flag;
+
+                WxBeacon2::ResponseFlag flag = { (uint8_t)WxBeacon2::ResponseFlag::UpdateFlag::FailedToRetrieveData };
                 do
                 {
-                    flag = WxBeacon2::ResponseFlag();
                     if(!getResponseFlag(flag)) { WB2_LOGD("Failed to getResponseFlag"); break; }
-                }while(flag.updateFlag() == WxBeacon2::ResponseFlag::UpdateFlag::Retrieving);
+                    delay(10);
+                }while(flag._updateFlag == WxBeacon2::ResponseFlag::UpdateFlag::Retrieving);
 
                 WB2_LOGD("%02x:%08x", flag._updateFlag, flag._time32);
 
-                if(flag.updateFlag() != WxBeacon2::ResponseFlag::UpdateFlag::Completed) { continue; }
+                if(flag._updateFlag != WxBeacon2::ResponseFlag::UpdateFlag::Completed) { continue; }
 
                 WB2_LOGI("emplace_back %u", page);
                 vec.emplace_back(page, static_cast<std::time_t>(flag._time32));
@@ -433,11 +470,10 @@ bool WxBeacon2Client::getPageCreatedTime(std::vector<PageTime>& vec, const uint1
     return vec.size() == to - from + 1;
 }
 
-
 // Setting Service (Service UUID: 0x3010)
 bool WxBeacon2Client::getMeasurementInterval(WxBeacon2::MeasurementInterval& mi)
 {
-    return getClientValue(_client, mi, WxBeacon2::MeasurementInterval::UUID);
+    return getCustomCharacteristicValue(_client, mi, WxBeacon2::MeasurementInterval::UUID);
 }
 
 bool WxBeacon2Client::setMeasurementInterval(const uint16_t sec)
@@ -457,7 +493,7 @@ bool WxBeacon2Client::setMeasurementInterval(const uint16_t sec)
 // Control Service (Service UUID: 0x3030)
 bool WxBeacon2Client::getTimeInformation(WxBeacon2::TimeInformation& info)
 {
-    return getClientValue(_client, info, WxBeacon2::TimeInformation::UUID);
+    return getCustomCharacteristicValue(_client, info, WxBeacon2::TimeInformation::UUID);
 }
 
 bool WxBeacon2Client::setTimeInformation(const time_t unixTime)
@@ -499,7 +535,7 @@ bool WxBeacon2Client::setLED(const uint8_t duration)
 
 bool WxBeacon2Client::getErrorStatus(WxBeacon2::ErrorStatus& status)
 {
-    return getClientValue(_client, status, WxBeacon2::ErrorStatus::UUID);
+    return getCustomCharacteristicValue(_client, status, WxBeacon2::ErrorStatus::UUID);
 }
 
 bool WxBeacon2Client::setErrorStatus(const WxBeacon2::ErrorStatus& status)
@@ -514,7 +550,7 @@ bool WxBeacon2Client::setErrorStatus(const WxBeacon2::ErrorStatus& status)
 // Parameter Service (Service UUID: 0x3040)
 bool WxBeacon2Client::getADVSetting(WxBeacon2::ADVSetting& setting)
 {
-    return getClientValue(_client, setting, WxBeacon2::ADVSetting::UUID);
+    return getCustomCharacteristicValue(_client, setting, WxBeacon2::ADVSetting::UUID);
 }
 
 bool WxBeacon2Client::setADVSetting(const WxBeacon2::ADVSetting& setting)
@@ -524,4 +560,76 @@ bool WxBeacon2Client::setADVSetting(const WxBeacon2::ADVSetting& setting)
     auto sv = _client->getService(customServiceUUID(WxBeacon2::ADVSetting::UUID));
     if(!sv) { WB2_LOGE("Service not exists"); return false; }
     return sv->setValue(customCharacteristicsUUID(WxBeacon2::ADVSetting::UUID), static_cast<std::string>(setting));
+}
+
+// Generic Access Service
+bool WxBeacon2Client::getDeviceName(std::string& dname)
+{
+    assert(_client);
+    dname.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::GenericAccesssService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    dname = sv->getValue(NimBLEUUID(WxBeacon2::GenericAccesssService::DeviceName::UUID));
+    return !dname.empty();
+}
+
+bool WxBeacon2Client::getAppearance(WxBeacon2::GenericAccesssService::Appearance& app)
+{
+    return getCharacteristicValue(_client, app, WxBeacon2::GenericAccesssService::UUID, WxBeacon2::GenericAccesssService::Appearance::UUID);
+}
+
+bool WxBeacon2Client::getPeripheralPreferredConnectionParameters(WxBeacon2::GenericAccesssService::PeripheralPreferredConnectionParameters& params)
+{
+    return getCharacteristicValue(_client, params, WxBeacon2::GenericAccesssService::UUID, WxBeacon2::GenericAccesssService::PeripheralPreferredConnectionParameters::UUID);
+}
+
+// Device Information Service
+bool WxBeacon2Client::getModelNumber(std::string& mnum)
+{
+    assert(_client);
+    mnum.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::DeviceInformationService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    mnum = sv->getValue(NimBLEUUID(WxBeacon2::DeviceInformationService::ModelNumber::UUID));
+    return !mnum.empty();
+}
+
+bool WxBeacon2Client::getSerialNumber(std::string& snum)
+{
+    assert(_client);
+    snum.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::DeviceInformationService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    snum = sv->getValue(NimBLEUUID(WxBeacon2::DeviceInformationService::SerialNumber::UUID));
+    return !snum.empty();
+}
+
+bool WxBeacon2Client::getFirmwareRevision(std::string& frev)
+{
+    assert(_client);
+    frev.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::DeviceInformationService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    frev = sv->getValue(NimBLEUUID(WxBeacon2::DeviceInformationService::FirmwareRevision::UUID));
+    return !frev.empty();
+}
+
+bool WxBeacon2Client::getHardwareRevision(std::string& hrev)
+{
+    assert(_client);
+    hrev.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::DeviceInformationService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    hrev = sv->getValue(NimBLEUUID(WxBeacon2::DeviceInformationService::HardwareRevision::UUID));
+    return !hrev.empty();
+}
+
+bool WxBeacon2Client::getManufacturerName(std::string& mname)
+{
+    assert(_client);
+    mname.clear();
+    auto sv = _client->getService(NimBLEUUID(WxBeacon2::DeviceInformationService::UUID));
+    if(!sv) { WB2_LOGE("Service not exists"); return false; }
+    mname = sv->getValue(NimBLEUUID(WxBeacon2::DeviceInformationService::ManufacturerName::UUID));
+    return !mname.empty();
 }
