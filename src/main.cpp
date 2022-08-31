@@ -202,7 +202,7 @@ time_t lastUpdate = -1;
 // Task of get advertise data from WxBeacon2.
 void wb2_advertise_task(void*)
 {
-    NimBLEScan* scan = BLEDevice::getScan();
+    NimBLEScan* scan = NimBLEDevice::getScan();
     WxBeacon2AdvertiseCallbacks cb;
     scan->setAdvertisedDeviceCallbacks(&cb);
     scan->setInterval(1000);
