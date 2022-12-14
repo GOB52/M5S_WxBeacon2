@@ -43,7 +43,7 @@ class WxBeacon2
     };
     constexpr static bool validBeaconMode(const BeaconMode bm)
     {
-        return (const uint8_t)bm <= (const uint8_t)BeaconMode::EventBeaconADV && bm != BeaconMode::Unused0;
+        return (uint8_t)bm <= (uint8_t)BeaconMode::EventBeaconADV && bm != BeaconMode::Unused0;
     }
 
     /*!
