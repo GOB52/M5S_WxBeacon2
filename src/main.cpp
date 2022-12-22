@@ -298,7 +298,7 @@ void playForecast()
         }
         ts += "        ";
     }
-    aq_talk::playAquesTalk(vs.c_str(), 110);
+    aq_talk::playAquesTalk(vs.c_str(), 120);
 
     ticker->setTitle("Weather");
     ticker->setText(ts.c_str());
