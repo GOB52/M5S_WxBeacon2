@@ -24,6 +24,10 @@
 #include <gob_datetime.hpp>
 #include "cpu_usage.hpp"
 
+#ifdef ARDUINO_M5STACK_Core2
+#include "himawari/himawari_task.hpp"
+#endif
+
 #include <ctime>
 #include <cstdio>
 #include <algorithm>
@@ -74,6 +78,9 @@ constexpr BaseType_t advertiseCore = 1;
 constexpr UBaseType_t forecastPriority = 1;
 constexpr BaseType_t forecastCore = 1;
 
+constexpr UBaseType_t himawariPriority = 1;
+constexpr BaseType_t himawariCore = 1;
+
 constexpr UBaseType_t aqtalkPriority = 2;
 constexpr BaseType_t aqtalkCore = 1;
 
@@ -117,6 +124,12 @@ struct Weather
 std::map<OffsetDateTime, std::vector<Weather> > forecast;
 OffsetDateTime requestDatetime;
 bool updatedForecast = false;
+
+//
+#ifdef ARDUINO_M5STACK_Core2
+bool updatedHimawari = false;
+const uint8_t* himawariImage = nullptr;
+#endif
 
 // Ticker text
 PROGMEM const char DEFAULT_TICKER_TEXT[] = "WEATHEROID Type A Airi    ";
@@ -179,7 +192,14 @@ void configTime()
 }
 
 //
-bool canRequest() { return (!busyAdvertise() && !jma::busyForecast()); }
+bool canRequest()
+{
+#ifdef ARDUINO_M5STACK_Core2
+    return !busyAdvertise() && !jma::busyForecast() && !himawari::busy();
+#else
+    return !busyAdvertise() && !jma::busyForecast();
+#endif
+}
 
 // Play advertise
 void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
@@ -357,6 +377,12 @@ void _requestForecast()
     if(canRequest())
     {
 #if 0
+        himawari::request();
+        ticker->setTitle(REQUEST_TICKER_TITLE);
+        return;
+#endif
+        
+#if 0
         // TEST
         lastUpdate = std::time(nullptr);
         forecast.clear();
@@ -414,6 +440,15 @@ void callbackOnEndAqTalk()
 {
     voiceEnd = std::time(nullptr);
 }
+
+#ifdef ARDUINO_M5STACK_Core2
+// Request himawari image
+void callbackOnImage(const uint8_t* ptr)
+{
+    himawariImage = ptr;
+    updatedHimawari = true;
+}
+#endif
 
 PROGMEM static const char t0[] = "minnasa--n,ponnbanwa,weza-roido'taipuei,airi'desu";
 PROGMEM static const char t1[] = "konsyu-no/saikaiwa,'kaniza";
@@ -481,9 +516,12 @@ void setup()
     configTime();
     M5.Display.fillScreen(TFT_DARKGREEN);
 
-    // WxBeacon2 / Forecast
+    // WxBeacon2 / Forecast / Himawari
     initilizeAdvertise(advertisePriority, advertiseCore, callbackOnAdvertise);
-    jma::initializeForecast(forecastPriority,forecastCore, callbackOnForecast);
+    jma::initializeForecast(forecastPriority, forecastCore, callbackOnForecast);
+#ifdef ARDUINO_M5STACK_Core2
+    himawari::initialize(himawariPriority, himawariCore, callbackOnImage);
+#endif
     
     // AquesTalk
     auto ret = aq_talk::initialize(aqtalkPriority, aqtalkCore, callbackOnEndAqTalk);
@@ -621,8 +659,12 @@ void loop()
     // Update
     avatar->pump();
     ticker->pump();
+#ifdef ARDUINO_M5STACK_Core2
+    progress->pump(busyAdvertise(), (jma::busyForecast() || himawari::busy()));
+#else
     progress->pump(busyAdvertise(), jma::busyForecast());
-    
+#endif    
+
     // Rendering
     {
         weatherMap->render(&M5.Display, forceRender);
@@ -633,8 +675,14 @@ void loop()
 
 #if !defined(NDEBUG) && defined(M5S_WXBEACON2_DEBUG_INFO)
         M5.Display.setCursor(128, 120);
+# ifdef ARDUINO_M5STACK_Core2
+        M5.Display.printf("a:%d f:%d h:%d aq:%d s:%d",
+                          busyAdvertise(), jma::busyForecast(), himawari::busy(),
+                          aq_talk::busy(), M5.Speaker.isPlaying());
+# else
         M5.Display.printf("a:%d f:%d aq:%d s:%d",
                           busyAdvertise(), jma::busyForecast(), aq_talk::busy(), M5.Speaker.isPlaying());
+# endif
         M5.Display.setCursor(128, 128);
         M5.Display.printf("ih:%06u ilf:%06u",
                           esp_get_free_internal_heap_size(),
