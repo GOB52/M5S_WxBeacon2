@@ -16,6 +16,8 @@
 #include "aq_talk.hpp"
 #include "ponko_avatar.hpp"
 #include "wni_ticker.hpp"
+#include "weather_map.hpp"
+#include "progress_icon.hpp"
 #include "wb2/wxbeacon2_communication.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 #include "jma/jma_task.hpp"
@@ -34,6 +36,10 @@
 #define ESP_IDF_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
 #define ESP_IDF_VERSION ESP_IDF_VERSION_VAL(3,2,0)
 #endif
+
+using goblib::datetime::LocalTime;
+using goblib::datetime::LocalDateTime;
+using goblib::datetime::OffsetDateTime;
 
 namespace
 {
@@ -55,6 +61,8 @@ const char* ntpURL[] =
 
 Avatar* avatar;
 Ticker* ticker;
+WeatherMap* weatherMap;
+ProgressIcon* progress;
 bool forceRender = true; // Force rendering all
 time_t lastUpdate = -1;
 time_t voiceEnd = -1;
@@ -93,7 +101,7 @@ struct Weather
             snprintf(buf, sizeof(buf), "[%s] %s %d℃/%d℃",
                      jma::officesCodeToString(oc),
                      jma::weatherCodeToString(wc),
-                     lowTemp, highTemp);
+                     highTemp, lowTemp);
         }
         else
         {
@@ -106,7 +114,7 @@ struct Weather
     }
 
 };
-std::map<goblib::datetime::OffsetDateTime, std::vector<Weather> > forecast;
+std::map<OffsetDateTime, std::vector<Weather> > forecast;
 OffsetDateTime requestDatetime;
 bool updatedForecast = false;
 
@@ -178,6 +186,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
 {
     forceRender = true;
     avatar->closeup();
+    weatherMap->hide();
     aq_talk::stopAquesTalk();
 
     auto de = data.getE();
@@ -253,11 +262,13 @@ void _requestAdvertise()
 void playForecast()
 {
     forceRender = true;
-    avatar->wipe(72, 32, 0.30f, requestDatetime);
-    avatar->clearIcon();
-
+    avatar->wipe(72, 32, 0.30f);
+    weatherMap->setDatetime(requestDatetime);
+    
     if(forecast.empty())
     {
+        avatar->closeup();
+        weatherMap->hide();
         ticker->setTitle("ERROR");
         ticker->setColor(Ticker::Color::Purple);
         ticker->setText(DEFAULT_TICKER_TEXT);
@@ -269,6 +280,7 @@ void playForecast()
     auto vs = formatString("<NUMK VAL=%d COUNTER=gatu><NUMK VAL=%d COUNTER=nichi>no/tenki'o/osirase'simasu  ",
                            requestDatetime.month(), requestDatetime.day());
 
+    weatherMap->clearIcon();
     for(auto& e : forecast) // each date-time
     {
         WB2_LOGV("%s:[%s] %zu", requestDatetime.toString().c_str(), e.first.toString().c_str(), e.second.size());
@@ -282,7 +294,7 @@ void playForecast()
             ts += w.toString() + ' ';
             vs += formatString("%s %s  #", aq_talk::officeCodeToTalk(w.oc), aq_talk::weatherCodeToTalk(w.wc));
 
-            avatar->addIcon(w.oc, w.wc);
+            weatherMap->addIcon(w.oc, w.wc);
         }
         ts += "        ";
     }
@@ -291,6 +303,7 @@ void playForecast()
     ticker->setTitle("Weather");
     ticker->setText(ts.c_str());
     ticker->setColor(Ticker::Color::Green);
+    weatherMap->show();
 }
 
 // Callback on get forecast.
@@ -376,12 +389,17 @@ void _requestForecast()
 
         lastUpdate = std::time(nullptr);
         forecast.clear();
-        requestDatetime = OffsetDateTime::now();
-#if 0
-        auto ldt = requestDatetime.toLocalDateTime();
-        ldt = goblib::datetime::LocalDateTime::of(ldt.year(), ldt.month(), ldt.day() + 1, ldt.hour(), ldt.minute(), ldt.second());
-        requestDatetime = OffsetDateTime::of(ldt, requestDatetime.offset());
-#endif
+        auto odt = OffsetDateTime::now();
+        if(odt.toLocalTime() > LocalTime(17, 0, 0))
+        {
+            auto ldt = odt.toLocalDateTime();
+            auto epoch = ldt.toEpochSecond(odt.offset()) + 86400; // next day
+            ldt = LocalDateTime::ofEpochSecond(epoch, odt.offset());
+            odt = OffsetDateTime::of(ldt, odt.offset());
+        }
+        requestDatetime = odt;
+        WB2_LOGI("request forecast:%s", odt.toString().c_str());
+
         jma::requestForecast();
 
         ticker->setTitle(REQUEST_TICKER_TITLE);
@@ -438,20 +456,27 @@ void setup()
     scfg.task_pinned_core = speakerCore;
     M5.Speaker.config(scfg);
     M5.Speaker.begin();
-    //M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 128 : 64);
-    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 80 : 40);
+    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 128 : 64);
+    //    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 80 : 40);
 
     delay(500);
     M5.Display.setBrightness(40);
     M5.Display.clear();
+
+    WB2_LOGV("objects");
     
-    // Avatar and ticker
+    // Avatar,Ticker and WeatherMap
     avatar = new Avatar();
     assert(avatar);
     ticker = new Ticker();
     assert(ticker);
     ticker->setText(DEFAULT_TICKER_TEXT);
-
+    weatherMap = new WeatherMap();
+    assert(weatherMap);
+    progress = new ProgressIcon();
+    assert(progress);
+    
+    WB2_LOGV("after objects");    
     // ConfigTime
     configTime();
     M5.Display.fillScreen(TFT_DARKGREEN);
@@ -596,13 +621,17 @@ void loop()
     // Update
     avatar->pump();
     ticker->pump();
-
+    progress->pump(busyAdvertise(), jma::busyForecast());
+    
     // Rendering
     {
-        avatar->render(&M5.Display, forceRender); forceRender = false;
+        weatherMap->render(&M5.Display, forceRender);
+        avatar->render(&M5.Display, forceRender);
         ticker->render(&M5.Display);
+        progress->render(&M5.Display);
+        forceRender = false;
 
-#if 0
+#if !defined(NDEBUG) && defined(M5S_WXBEACON2_DEBUG_INFO)
         M5.Display.setCursor(128, 120);
         M5.Display.printf("a:%d f:%d aq:%d s:%d",
                           busyAdvertise(), jma::busyForecast(), aq_talk::busy(), M5.Speaker.isPlaying());
@@ -613,7 +642,6 @@ void loop()
         M5.Display.setCursor(128, 136);
         M5.Display.printf("c0:%03.1f c1:%03.1f", cpu_usage::cpu0(), cpu_usage::cpu1());
         cpu_usage::reset();
-
 #endif
     }
 

@@ -23,6 +23,12 @@ extern const size_t  logo_bmp_len;
 extern const uint8_t jpmap_bmp[];
 extern const size_t  jpmap_bmp_len;
 
+// 1bpp WifI/BT icon
+extern const uint8_t wifi_bmp[];
+extern const size_t  wifi_bmp_len;
+extern const uint8_t bt_bmp[];
+extern const size_t  bt_bmp_len;
+
 // Text font
 extern const lgfx::U8g2font titleFont;
 extern const lgfx::U8g2font tickerFont;
@@ -82,6 +88,9 @@ extern const size_t w302_png_len;
 extern const uint8_t w303_png[];
 extern const size_t w303_png_len;
 
+extern const uint8_t w308_png[];
+extern const size_t w308_png_len;
+
 extern const uint8_t w311_png[];
 extern const size_t w311_png_len;
 
@@ -102,6 +111,9 @@ extern const size_t w402_png_len;
 
 extern const uint8_t w403_png[];
 extern const size_t w403_png_len;
+
+extern const uint8_t w406_png[];
+extern const size_t w406_png_len;
 
 extern const uint8_t w411_png[];
 extern const size_t w411_png_len;
