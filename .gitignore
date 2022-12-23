@@ -31,6 +31,8 @@
 *.out
 *.app
 
+#pio
+/.pio
 
 # resources
 /src/res/*.cpp
