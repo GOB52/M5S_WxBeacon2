@@ -1,7 +1,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
-#include "wxbeacon2_communication.hpp"
+#include "wxbeacon2_task.hpp"
 #include "wxbeacon2_ble.hpp"
 #include "wxbeacon2_log.hpp"
 

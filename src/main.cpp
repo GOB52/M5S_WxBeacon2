@@ -19,7 +19,7 @@
 #include "wni_ticker.hpp"
 #include "weather_map.hpp"
 #include "progress.hpp"
-#include "wb2/wxbeacon2_communication.hpp"
+#include "wb2/wxbeacon2_task.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 #include "jma/jma_task.hpp"
 #include <gob_datetime.hpp>

@@ -1,6 +1,6 @@
 
-#ifndef WXBEACON2_COMMUNICATION_HPP
-#define WXBEACON2_COMMUNICATION_HPP
+#ifndef WXBEACON2_TASK_HPP
+#define WXBEACON2_TASK_HPP
 
 #include "wxbeacon2.hpp"
 
