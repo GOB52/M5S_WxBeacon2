@@ -540,11 +540,7 @@ void drawHimawari()
     String ts = himawari::bandToString(himawariBand) + "    ";
     ticker->setText(ts.c_str());
     ticker->setColor(Ticker::Color::Green);
-
-    //    _requestHimawari();
-
 }
-
 #endif
 
 PROGMEM static const char t0[] = "minnasa--n,ponnbanwa,weza-roido'taipuei,airi'desu";
@@ -807,7 +803,6 @@ void loop()
     // Auto request
     if(canRequest() && lastUpdate > 0 && std::difftime(now, lastUpdate) >= AUTO_REQUEST_INTERVAL_SEC)
     {
-        WB2_LOGI("auto: %lf", std::difftime(now, lastUpdate));
         //_requestAdvertise();
         _requestHimawari();
     }
