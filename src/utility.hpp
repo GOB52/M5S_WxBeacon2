@@ -57,6 +57,9 @@ String join(const std::vector<T>& v, const char* separator = ", ")
                                         }) : String();
 }
 
+// Solit string
+std::vector<String> split(const String& str, const char delimiter  = ',');
+inline std::vector<String> split(const char* s, const char delimiter  = ',') { return split(String(s), delimiter); }
 //
 }
 #endif

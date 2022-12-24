@@ -123,7 +123,26 @@ struct Weather
         buf[sizeof(buf)-1] = '\0';
         return String(buf);
     }
-
+    String toColorString() const
+    {
+        char buf[128];
+        // low == temp means Iinvalid data.(The lowest highest temperature on the day of the announcement is invalid)
+        if(lowTemp != highTemp)
+        {
+            snprintf(buf, sizeof(buf), "#@1[%s] %s #@2%d℃#@3%d℃",// @"#n" Palette NO of text for ticker.
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc),
+                     highTemp, lowTemp);
+        }
+        else
+        {
+            snprintf(buf, sizeof(buf), "[%s] %s",
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc));
+        }
+        buf[sizeof(buf)-1] = '\0';
+        return String(buf);
+    }
 };
 std::map<OffsetDateTime, std::vector<Weather> > forecast;
 OffsetDateTime requestForecastDatetime;
@@ -285,7 +304,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
     aq_talk::playAquesTalk(vs.c_str(), 120);
 
     //    auto ts = formatString("TEMP %3.1fdegC HUM %3.1f%% AL %dlx UV %3.1f PRESURE %4.1fhPa N %3.1fdB DCMFT %3.1f WBGT %3.1f   ",
-    auto ts = formatString("気温:%3.1f℃ 湿度:%3.1f%% 明度:%dlx UV指数:%3.1f 気圧:%4.1fhPa 騒音:%3.1fdB 不快指数:%3.1f WBGT:%3.1f        ",
+    auto ts = formatString("気温:#@2%3.1f#@1℃ 湿度#@2:%3.1f#@1%% 明度:#@2%d#@1lx UV指数:#@2%3.1f #@1気圧:#@2%4.1f#@1hPa 騒音:#@2%3.1f#@1dB 不快指数:#@2%3.1f #@1WBGT:#@2%3.1f        ",
                            (float)de->temperature(),
                            (float)de->relativeHumidity(),
                            (int)de->ambientLight(),
@@ -452,7 +471,7 @@ void playForecast()
         std::sort(wv.begin(), wv.end(), [](const Weather& a, const Weather& b) { return a.oc < b.oc; }); // Ascend officecode_t
         for(auto& w : wv)
         {
-            ts += w.toString() + ' ';
+            ts += w.toColorString() + ' ';
             vs += formatString("%s %s  #", aq_talk::officeCodeToTalk(w.oc), aq_talk::weatherCodeToTalk(w.wc));
 
             weatherMap->addIcon(w.oc, w.wc);
@@ -577,7 +596,7 @@ void setup()
 
     // Incrase internal heap.
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-    
+
     //
     M5.begin();  
     auto bd = M5.getBoard();

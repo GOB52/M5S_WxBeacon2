@@ -8,9 +8,9 @@
 #include <esp_system.h>
 #include <cstddef>
 #include <cmath>
-#include <string>
 #include <vector>
 #include <map>
+#include "utility.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 
 namespace
@@ -296,24 +296,9 @@ TaskHandle_t task_handle = nullptr;
 volatile bool is_talking = false;
 volatile uint32_t level = 0;
 
-std::vector<std::string> koeQueue;
+std::vector<String> koeQueue;
 uint16_t koeSpeed = 100;
 uint16_t koeLenPause = 256U;
-
-std::vector<std::string> split(const char* s, const char* separator = ",")
-{
-    std::vector<std::string> out;
-    char dup[strlen(s) + 1];
-    snprintf(dup, sizeof(dup), "%s", s);
-
-    auto p = strtok(dup, separator);
-    if(p)
-    {
-        out.emplace_back(p);
-        while((p = strtok(nullptr, separator))) { out.emplace_back(p); }
-    }
-    return out;
-}
 
 void calcGainAverage(const int16_t* wav, const size_t len)
 {
@@ -410,7 +395,7 @@ bool playAquesTalk(const char *koe, const uint16_t speed, const uint16_t lenPaus
     
     // Split and store queue. (CAqTkPicoF_SetKoe has a length limitation)
     koeQueue.clear();
-    koeQueue = split(koe, "#");
+    koeQueue = gob::split(koe, '#');
     koeSpeed = speed;
     koeLenPause = lenPause;
     WB2_LOGV("queue:%zu", koeQueue.size());

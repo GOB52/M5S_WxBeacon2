@@ -6,7 +6,6 @@
 #define AQ_TALK_HPP
 
 #include "jma/jma_definition.hpp"
-//#include <freertos/FreeRTOS.h>
 
 namespace aq_talk
 {

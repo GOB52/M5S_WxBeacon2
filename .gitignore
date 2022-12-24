@@ -36,9 +36,9 @@
 
 # resources
 /src/res/*
-!/res/resource.h
-!/res/u8g2_font_profont22_tr.*
-!/res/wifi.cpp
-!/res/bt.cpp
-!/res/jpmap.cpp
+!/src/res/resource.h
+!/src/res/u8g2_font_profont22_tr.*
+!/src/res/wifi.cpp
+!/src/res/bt.cpp
+!/src/res/jpmap.cpp
 

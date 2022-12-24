@@ -33,7 +33,7 @@ class Ticker
     void pump();
     void render(m5gfx::M5GFX* dst);
 
-    constexpr static size_t STRING_LEN = 384;
+    constexpr static size_t STRING_LEN = 512;
     constexpr static int16_t GAP = 2;
     
     //Decoration left
@@ -46,12 +46,16 @@ class Ticker
     // Telop
     constexpr static int16_t TELOP_WIDTH = 320 - (DECOR_RIGHT_WIDTH + 2 * GAP + DECOR_LEFT_GAP);
     constexpr static int16_t TELOP_HEIGHT = 24; // height = fontHeight + (1 + 1)
-    constexpr static uint32_t TELOP_FCLR = ::lgfx::color888(  0,   0,   0); // palette 1
-    constexpr static uint32_t TELOP_BCLR = ::lgfx::color888(255, 255, 255); // palette 0
 
+    constexpr static uint16_t BG_COLOR = ::lgfx::color565(255, 255, 255);
+    constexpr static uint16_t DECOR_TEXT_COLOR = ::lgfx::color565(255, 255, 255);
     // Decoration foreground colors for each level.
-    static const uint32_t DECOR_FOREGROUND_COLORS[];
-
+    static const uint16_t DECOR_FOREGROUND_COLORS[];
+    static const uint16_t TELOP_COLORS[];
+    
+  private:
+    void drawTelop(const char* str, const int16_t x, const int16_t y);
+    
   private:
     // Telop
     LGFX_Sprite* _telop;
