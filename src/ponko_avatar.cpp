@@ -4,50 +4,46 @@
 #include "ponko_avatar.hpp"
 #include "aq_talk.hpp"
 #include "res/resource.h"
+#include "wb2/wxbeacon2_log.hpp"
 #include <cassert>
 
+namespace
+{
+void drawFace(m5gfx::M5GFX* dst, int16_t x, int16_t y, float zoom = 1.0f)
+{
+    dst->drawBmp(ponko_face_bmp, -1, x, y, 0, 0, 0, 0, zoom, zoom);
+}
+
+//
+}
 Avatar::Avatar()
-        : _face(nullptr)
-        , _offMouth(nullptr)
+        : _offMouth(nullptr)
         , _mouth{nullptr,nullptr}
         , _mouthRatio(0)
         , _lastMouthRatio(0)
+        , _wipe(false)
+        , _wipeX(0)
+        , _wipeY(0)
 {
-    _face = new gob::Sprite();
-    assert(_face && "_face is nullptr");
-    _face->createFromBmp(ponko_face_bmp, ponko_face_bmp_len);
-
+    // close
     auto mc = new LGFX_Sprite();
     assert(mc && "mc is nullptr");
     mc->createFromBmp(ponko_mouth_close_bmp, ponko_mouth_close_bmp_len);
-    _mouth[Close] = mc;
-    
+    mc->setPivot(mc->width() * 0.5f + 0.5f, 0); // center,top
+    _mouth[Close] = mc;    
+
+    // open
     auto mo = new LGFX_Sprite();
     assert(mo && "mo is nullptr");
     mo->createFromBmp(ponko_mouth_open_bmp, ponko_mouth_open_bmp_len);
-    mo->setPivot(mo->width()/2, 0);
-    
+    mo->setPivot(mo->width() * 0.5f + 0.5f, 0); // center,top
     _mouth[Open] = mo;
 
     // offscreen for mouth
     _offMouth= new LGFX_Sprite();
     assert(_offMouth && "_offMouth is nullptr");
-    _offMouth->createFromBmp(ponko_mouth_open_bmp, ponko_mouth_open_bmp_len); // same as mouth open/close bitmap palette and width/height
-
-    // check
-    assert(mc->width() == mo->width() && "different widths");
-    assert(mc->height() == mo->height() && "different heights");
-    assert(_offMouth->width() == mo->width() && "different widths");
-    assert(_offMouth->height() == mo->height() && "different heights");
-
-    assert(_face->getPaletteCount() == 16 && "not 4bpp");
-    assert(mc->getPaletteCount() == 16 && "not 4bpp");
-    assert(mo->getPaletteCount() == 16 && "not 4bpp");
-    assert(_offMouth->getPaletteCount() == 16 && "not 4bpp");
-    
-    assert(memcmp(_face->getPalette(), mc->getPalette(), sizeof(RGBColor) * 16) == 0 && "diffrent palettes");
-    assert(memcmp(mc->getPalette(), mo->getPalette(), sizeof(RGBColor) * 16) == 0 && "diffrent palettes");
-    assert(memcmp(mo->getPalette(), _offMouth->getPalette(), sizeof(RGBColor) * 16) == 0 && "diffrent palettes");
+    _offMouth->createFromBmp(ponko_mouth_open_bmp, ponko_mouth_open_bmp_len); // same as open
+    _offMouth->setPivot(_offMouth->width() * 0.5f + 0.5f, _offMouth->height() * 0.5f + 0.5f); // center
 }
 
 Avatar::~Avatar()
@@ -55,7 +51,6 @@ Avatar::~Avatar()
     delete _offMouth;
     delete _mouth[Open];
     delete _mouth[Close];
-    delete _face;
 }
 
 void Avatar::pump()
@@ -67,7 +62,6 @@ void Avatar::pump()
     }
 
     auto gain = aq_talk::getGain();
-
     float f = gain / 12000.0f;
     float ratio = std::min(1.0f, _lastMouthRatio + f / 2.0f);
 
@@ -75,12 +69,12 @@ void Avatar::pump()
     _mouthRatio = ratio;
 }
 
-void Avatar::render(m5gfx::M5GFX* dst, bool forceFace)
+void Avatar::renderCloseup(m5gfx::M5GFX* dst, bool force)
 {
-    if(forceFace) { _face->pushSprite(dst, 0, 0); }
-    
-    _offMouth->clear();
-    _face->pushPartial(_offMouth, 0, 0, MOUTH_WIDTH, MOUTH_HEIGHT, MOUTH_X, MOUTH_Y);
+    if(force) { drawFace(dst, 0, 0); }
+
+    _offMouth->drawBmp(ponko_face_bmp, -1, 0, 0, _offMouth->width(), _offMouth->height(), MOUTH_X, MOUTH_Y);
+
     if(_mouthRatio != 0.0f)
     {
         auto s = _mouth[Open];
@@ -97,4 +91,34 @@ void Avatar::render(m5gfx::M5GFX* dst, bool forceFace)
         s->pushSprite(_offMouth, 0, 0, 0);
     }
     _offMouth->pushSprite(dst, MOUTH_X, MOUTH_Y);
+}
+
+void Avatar::renderWipe(m5gfx::M5GFX* dst, bool force)
+{
+    if(force)
+    {
+        drawFace(dst, _wipeX, _wipeY, _wipeScale);
+        dst->drawRect(_wipeX, _wipeY, 320 * _wipeScale, 240 * _wipeScale, TFT_WHITE);
+    }
+
+    _offMouth->drawBmp(ponko_face_bmp, -1, 0, 0, _offMouth->width(), _offMouth->height(), MOUTH_X, MOUTH_Y);
+    if(_mouthRatio != 0.0f)
+    {
+        auto s = _mouth[Open];
+        s->pushRotateZoom(_offMouth,
+                          0 + s->width() * (s->getPivotX() / s->width()),
+                          0 + s->height() * (s->getPivotY() / s->height()),
+                          0.0f, 1.0f, _mouthRatio,
+                          0);
+
+    }
+    else
+    {
+        auto s = _mouth[Close];
+        s->pushSprite(_offMouth, 0, 0, 0);
+    }
+    _offMouth->pushRotateZoom(dst,
+                              _wipeX + MOUTH_X * _wipeScale + _offMouth->getPivotX() * _wipeScale,
+                              _wipeY + MOUTH_Y * _wipeScale + _offMouth->getPivotY() * _wipeScale,
+                              0.0f, _wipeScale, _wipeScale, 0);
 }

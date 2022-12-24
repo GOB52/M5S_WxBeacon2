@@ -6,33 +6,38 @@
 
 #include <M5GFX.h>
 
+//namespace gob { class Sprite; }
+
 class Ticker
 {
   public:
-    enum Level : uint8_t { Blue, Yellow, Red, Purple, Max };
+    enum Color : uint8_t { Blue, Yellow, Red, Purple, Green, Max };
 
     Ticker();
     virtual ~Ticker();
 
+    void setTitle(const char* title);
     void setText(const char* str);
 
     bool isShow() const { return _show; }
-    void show(bool b) { _show = b; }
+    void show(const bool b) { _show = b; }
     void show() { show(true); }
     void hide() { show(false); }
 
-    Level level() const { return _level; }
-    void setLevel(const Level lv);
-    void setLevelWBGT(float wbgt);
-    
-    virtual void pump();
-    virtual void render(m5gfx::M5GFX* dst);
+    Color color() const { return _color; }
+    void setColor(const Color lv);
+    void setLevelWBGT(const float wbgt);
 
-    constexpr static size_t STRING_LEN = 256;
+    void setScrollSpeed(const uint8_t s) { _speed = s; }
+    
+    void pump();
+    void render(m5gfx::M5GFX* dst);
+
+    constexpr static size_t STRING_LEN = 384;
     constexpr static int16_t GAP = 2;
     
     //Decoration left
-    constexpr static int16_t DECOR_LEFT_WIDTH = 64;
+    constexpr static int16_t DECOR_LEFT_WIDTH = 160;
     constexpr static int16_t DECOR_LEFT_HEIGHT = 48;
     constexpr static int16_t DECOR_LEFT_GAP = 4;
     //Decoration right
@@ -50,15 +55,17 @@ class Ticker
   private:
     // Telop
     LGFX_Sprite* _telop;
+    //    gob::Sprite* _telop2;
     char _str[STRING_LEN + 1/* \0 */];
     int16_t _twidth;
-    int16_t _x;
+    int16_t _x, _speed;
     // Decoration
+    int16_t _decorLeftWidth;
     LGFX_Sprite* _decorLeft;
     LGFX_Sprite* _decorRight;
     LGFX_Sprite* _logo;
-    // Status
-    Level _level;
+
+    Color _color;
     bool _show;
 };
 

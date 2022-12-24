@@ -6,6 +6,8 @@
 #ifndef WXBEACON2_LOG_HPP
 #define WXBEACON2_LOG_HPP
 
+#ifdef ARDUINO
+
 namespace wxbeacon2
 {
 constexpr char tag[] = "WB2";
@@ -47,5 +49,6 @@ constexpr char tag[] = "WB2";
 
 #endif
 
+#endif
 //
 #endif

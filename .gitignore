@@ -33,7 +33,4 @@
 
 
 # resources
-ponko_face.cpp
-ponko_mouth_*.cpp
-logo.cpp
-
+/src/res/*.cpp
