@@ -29,7 +29,7 @@ constexpr int16_t  PROGRESS_X = 4;
 constexpr int16_t  PROGRESS_X = 40;
 #endif
 constexpr int16_t  PROGRESS_Y = 180;
-constexpr int16_t  PROGRESS_WIDTH = 100;
+constexpr int16_t  PROGRESS_WIDTH = 80;
 constexpr int16_t  PROGRESS_HEIGHT = 8;
 constexpr uint16_t PROGRESS_BG_CLR = TFT_BLACK;
 constexpr uint16_t PROGRESS_FG_CLR = TFT_SKYBLUE;

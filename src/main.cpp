@@ -177,12 +177,11 @@ struct ESP32RNG
     result_type  operator()() { return esp_random() % max(); }
 };
 
-
 // Configurate Time by NTP.
 void configTime()
 {
     // WiFi connect
-    WiFi.begin(); // Connect to credential in Hardware. (ESP32 saves the last Wifi connection)
+    WiFi.begin(); // Connect to credential in Hardware. (ESP32 saves the last WiFi connection)
     int tcount = 20;
     while(tcount-- > 0 && WiFi.status() != WL_CONNECTED)
     {
@@ -286,7 +285,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
     aq_talk::playAquesTalk(vs.c_str(), 120);
 
     //    auto ts = formatString("TEMP %3.1fdegC HUM %3.1f%% AL %dlx UV %3.1f PRESURE %4.1fhPa N %3.1fdB DCMFT %3.1f WBGT %3.1f   ",
-    auto ts = formatString("気温:%3.1f度 湿度:%3.1f%% 明度:%dlx UV指数:%3.1f 気圧:%4.1fhPa 騒音:%3.1fdB 不快指数:%3.1f WBGT:%3.1f        ",
+    auto ts = formatString("気温:%3.1f℃ 湿度:%3.1f%% 明度:%dlx UV指数:%3.1f 気圧:%4.1fhPa 騒音:%3.1fdB 不快指数:%3.1f WBGT:%3.1f        ",
                            (float)de->temperature(),
                            (float)de->relativeHumidity(),
                            (int)de->ambientLight(),
@@ -808,7 +807,7 @@ void loop()
     }
 
 
-#if 0
+#if 1
     // Auto request
     if(canRequest() && lastUpdate > 0 && std::difftime(now, lastUpdate) >= AUTO_REQUEST_INTERVAL_SEC)
     {
