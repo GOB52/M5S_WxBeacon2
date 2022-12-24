@@ -32,7 +32,13 @@
 *.app
 
 #pio
-/.pio
+/.pio/
 
 # resources
-/src/res/*.cpp
+/src/res/*
+!/res/resource.h
+!/res/u8g2_font_profont22_tr.*
+!/res/wifi.cpp
+!/res/bt.cpp
+!/res/jpmap.cpp
+
