@@ -2,7 +2,6 @@
   WNI style ticker
  */
 #include "wni_ticker.hpp"
-//#include "gob_sprite.hpp"
 #include "gob_datetime.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 #include "res/resource.h"

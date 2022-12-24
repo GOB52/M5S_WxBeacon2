@@ -1,7 +1,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
-#include "wxbeacon2_communication.hpp"
+#include "wxbeacon2_task.hpp"
 #include "wxbeacon2_ble.hpp"
 #include "wxbeacon2_log.hpp"
 
@@ -47,7 +47,8 @@ void wb2_advertise_task(void*)
         ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
 
         WB2_LOGI("Start scanning");
-        NimBLEDevice::init(""); 
+        NimBLEDevice::init("");
+        delay(100);
         NimBLEScan* scan = NimBLEDevice::getScan();
         WxBeacon2AdvertiseCallbacks cb;
         scan->setAdvertisedDeviceCallbacks(&cb);
@@ -60,14 +61,14 @@ void wb2_advertise_task(void*)
         while(scan->isScanning()) { delay(100); }
 
         wb2address = cb.address();
-        if(callback_on_advertise) { callback_on_advertise(cb.detected(), cb.data()); }
-
         scan->stop();
         scan->clearResults();
         NimBLEDevice::deinit(false);
+        delay(100);
 
         WB2_LOGI("End of scanning. detected :%d", cb.detected());
         progressAdvertise = false;
+        if(callback_on_advertise) { callback_on_advertise(cb.detected(), cb.data()); }        
     }
 }
 //

@@ -7,14 +7,44 @@
 #include "jma_task.hpp"
 #include "jma_forecast_handler.hpp"
 #include "wb2/wxbeacon2_log.hpp"
+#include "utility.hpp"
 
 namespace
 {
 // Request JMA forcast by WiFi
 TaskHandle_t forecastTask;
 volatile bool progressForecast = false;
-jma::forecast_callback callback_on_forecast;
+jma::forecast_callback callbackOnForecast;
+jma::progress_callback callbackOnProgress;
 PROGMEM const char JMA_FORECAST_URI_FORMAT[] = "https://www.jma.go.jp/bosai/forecast/data/forecast/%06d.json";
+
+// DigiCert Global Root CA of www.jma.go.jp.
+// Exxpire at Mon, 10 Nov 2031 00:00:00 GMT.
+PROGMEM const char root_ca_JMA[] =
+        R"***(-----BEGIN CERTIFICATE-----
+MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh
+MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
+d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD
+QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT
+MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j
+b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB
+CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97
+nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt
+43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P
+T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4
+gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO
+BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR
+TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw
+DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr
+hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg
+06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF
+PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls
+YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk
+CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=
+ -----END CERTIFICATE-----
+)***";
+
 // Cities from which data is obtained.
 PROGMEM const jma::officecode_t requestTable[] =
 {
@@ -30,6 +60,12 @@ PROGMEM const jma::officecode_t requestTable[] =
     400000, // Fukuoka
     471000, // Okinawa
 };
+
+void end()
+{
+    JMAHandler dummy;
+    callbackOnForecast(0 /* End */ , dummy._forecast, dummy._weeklyForecast);
+}
 
 void jma_forecast_task(void*)
 {
@@ -59,11 +95,12 @@ void jma_forecast_task(void*)
         {
             WB2_LOGE("Failed to connect WiFi");
             progressForecast = false;
+            end();
             continue;
         }
 
         // Get each JSON.
-        for(uint8_t index = 0; index < sizeof(requestTable)/sizeof(requestTable[0]); ++index)
+        for(uint8_t index = 0; index < gob::size(requestTable); ++index)
         {
             char url[128];
             snprintf(url, sizeof(url), JMA_FORECAST_URI_FORMAT, requestTable[index]);
@@ -73,23 +110,33 @@ void jma_forecast_task(void*)
         
             HTTPClient http;
             WiFiClientSecure client;
+            client.setCACert(root_ca_JMA);
             do
             {
-                client.setCACert(jma::root_ca_JMA);
                 int8_t gtry = 3;
                 int httpcode = 0;
                 // https GET
                 do
                 {
-                    http.begin(client, url);
+                    if(!http.begin(client, url))
+                    {
+                        WB2_LOGE("Failed to begin");
+                        continue;
+                    }
                     httpcode = http.GET();
-                    if(httpcode == HTTP_CODE_OK) { break; }
-                    WB2_LOGD("Failed to GET() %d", httpcode);
-                    http.end();
+                    if(httpcode >= 0) { break; }
+
+                    // HTTPClient internal error, to retry.
                     client.stop();
+                    http.end();
+                    delay(100);
                 }while(gtry--);
 
-                if(httpcode != HTTP_CODE_OK) { break; }
+                if(httpcode != HTTP_CODE_OK)
+                {
+                    WB2_LOGD("Failed to GET() %d", httpcode);
+                    break;
+                }
 
                 // parse JSON
                 JsonStreamingParser parser;
@@ -97,23 +144,19 @@ void jma_forecast_task(void*)
                 parser.setHandler(&handler);
                 while(client.available()) { parser.parse(client.read()); }
 
-                if(callback_on_forecast) { callback_on_forecast(requestTable[index], handler._forecast, handler._weeklyForecast); }
+                if(callbackOnForecast) { callbackOnForecast(requestTable[index], handler._forecast, handler._weeklyForecast); }
             }while(0);
 
-            http.end();
             client.stop();
+            http.end();
+            if(callbackOnProgress) { callbackOnProgress(index + 1, gob::size(requestTable)); }
+            delay(10);
         }
+
         WB2_LOGD("WiFi disconnect");
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
-
-        // terminate callback
-        if(callback_on_forecast)
-        {
-            JMAHandler dummy;
-            callback_on_forecast(0 /* End */ , dummy._forecast, dummy._weeklyForecast);
-        }
-
+        end();
         progressForecast = false;
     }
 }
@@ -123,12 +166,13 @@ void jma_forecast_task(void*)
 namespace jma
 {
 
-bool initializeForecast(const UBaseType_t priority, const BaseType_t core, forecast_callback f)
+bool initializeForecast(const UBaseType_t priority, const BaseType_t core, forecast_callback fc, progress_callback pc)
 {
     if(!forecastTask)
     {
         xTaskCreateUniversal(jma_forecast_task, "forecast_task", 8 * 1024, nullptr, priority, &forecastTask, core);
-        callback_on_forecast = f;
+        callbackOnForecast = fc;
+        callbackOnProgress = pc;
     }
     return forecastTask != nullptr;
 }

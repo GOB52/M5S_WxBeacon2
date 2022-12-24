@@ -355,7 +355,7 @@ void talk_task(void*)
                 M5.Speaker.playRaw(wav[tri_index], len, 8000, false, 1, m5spk_virtual_channel, false);
                 tri_index = tri_index < 2 ? tri_index + 1 : 0;
             }
-            delay(1);
+            delay(2);
         }
         if(callbackOnEnd) { callbackOnEnd(); }
     }
