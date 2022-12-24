@@ -10,7 +10,7 @@
 #include <M5GFX.h>
 #include <esp_system.h>
 #include <esp_bt.h> // esp_bt_controller_mem_release
-#include <esp_random.h> // hardware RNG
+#include <esp_random.h> // esp_random() is hardware RNG. (No random seed initialization is required)
 #include <WiFi.h>
 
 #include "utility.hpp"
@@ -54,12 +54,10 @@ namespace
 constexpr uint16_t AUTO_REQUEST_INTERVAL_SEC = 1 * 60;
 
 // NTP serve URL
-const char* ntpURL[] =
-{
-    "ntp.nict.jp",
-    "ntp.jst.mfeed.ad.jp",
-    "time.cloudflare.com",
-};
+PROGMEM const char ntp0[] = "ntp.nict.jp";
+PROGMEM const char ntp1[] = "ntp.jst.mfeed.ad.jp";
+PROGMEM const char ntp2[] = "time.cloudflare.com";
+const char* ntpURLTable[] = { ntp0, ntp1, ntp2 }; // DON'T USE PROGMEM! (because it will be shuffled later)
 
 // For configurate time
 #ifndef M5S_WXBEACON2_TIMEZONE_LOCATION
@@ -139,9 +137,8 @@ OffsetDateTime himawariDatetime;
 bool updatedHimawari = false;
 #endif
 
- 
-
 // Ticker text
+PROGMEM const char DEFAULT_TICKER_TITLE[] = "Ponko";
 PROGMEM const char DEFAULT_TICKER_TEXT[] = "WEATHEROID Type A Airi    ";
 PROGMEM const char NOTICE_TICKER_TEXT[] = "Press and hold C to put the WxBeacon2 into the broadcast mode.    ";
 PROGMEM const char NOT_EXISTS_BEACON_TICKER_TEXT[] = "WxBeacon2 IS NOT EXISTS.    ";
@@ -172,6 +169,15 @@ std::string formatString(const char* fmt, ...)
 }
 #endif
 
+struct ESP32RNG
+{
+    using result_type = uint32_t;
+    static result_type min() { return 0; }
+    static result_type max() { return gob::size(ntpURLTable); }
+    result_type  operator()() { return esp_random() % max(); }
+};
+
+
 // Configurate Time by NTP.
 void configTime()
 {
@@ -189,13 +195,15 @@ void configTime()
         abort();
     }
 
+    std::shuffle(std::begin(ntpURLTable), std::end(ntpURLTable), ESP32RNG());
     auto ptz = goblib::datetime::locationToPOSIX(M5S_WXBEACON2_TIMEZONE_LOCATION);
-    WB2_LOGI("tz:[%s]", ptz ? ptz : "NONE");
-    configTzTime(ptz ? ptz : "", ntpURL[0], ntpURL[1], ntpURL[2]);
+    WB2_LOGI("tz:[%s] [%s] [%s] [%s]", ptz ? ptz : "NONE", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
+
+    configTzTime(ptz ? ptz : "", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
     // waiting for time synchronization
     {
         std::tm discard{};
-        getLocalTime(&discard, 5 * 1000);
+        getLocalTime(&discard, 10 * 1000);
     }
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
@@ -599,6 +607,7 @@ void setup()
     assert(avatar);
     ticker = new Ticker();
     assert(ticker);
+    ticker->setTitle(DEFAULT_TICKER_TITLE);
     ticker->setText(DEFAULT_TICKER_TEXT);
     weatherMap = new WeatherMap();
     assert(weatherMap);
@@ -799,7 +808,7 @@ void loop()
     }
 
 
-#if 1
+#if 0
     // Auto request
     if(canRequest() && lastUpdate > 0 && std::difftime(now, lastUpdate) >= AUTO_REQUEST_INTERVAL_SEC)
     {
