@@ -37,6 +37,9 @@
 #pio
 /.pio/
 
+# Doxygen
+/doc/html
+
 # resources
 /src/res/*
 !/src/res/resource.h
