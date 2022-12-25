@@ -127,6 +127,7 @@ void jma_forecast_task(void*)
                     if(httpcode >= 0) { break; }
 
                     // HTTPClient internal error, to retry.
+                    WB2_LOGE("%s", http.errorToString(httpcode).c_str());
                     client.stop();
                     http.end();
                     delay(100);

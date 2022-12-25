@@ -51,7 +51,18 @@ using goblib::datetime::OffsetDateTime;
 namespace
 {
 // Automatic request interval.
-constexpr uint16_t AUTO_REQUEST_INTERVAL_SEC = 1 * 60;
+#ifdef M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC
+# define AUTO_REQUEST_INTERVAL_SEC (M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC)
+#else
+# define AUTO_REQUEST_INTERVAL_SEC (5 * 60)
+#endif
+
+// Automatic talk interval
+#ifdef M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC
+# define AUTO_TALK_INTERVAL_SEC (M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC)
+#else
+# define AUTO_TALK_INTERVAL_SEC (1 * 60)
+#endif
 
 // NTP serve URL
 PROGMEM const char ntp0[] = "ntp.nict.jp";
@@ -494,10 +505,10 @@ void callbackOnEndAqTalk()
 }
 
 // --------------------------------
+#ifdef ARDUINO_M5STACK_Core2
 // Request himawari image
 void _requestHimawari()
 {
-#ifdef ARDUINO_M5STACK_Core2
     if(canRequest())
     {
 #if 0
@@ -520,10 +531,8 @@ void _requestHimawari()
     {
         WB2_LOGD("busy");
     }
-#endif
 }
 
-#ifdef ARDUINO_M5STACK_Core2
 // Callback on progress
 void callbackOnProgressHimawari(const size_t readed, const size_t size)
 {
@@ -739,7 +748,6 @@ void loop()
     {
         longPressA = true;
         _requestForecast();
-        //_requestHimawari();
     }
     if(M5.BtnA.wasReleased())
     {
@@ -780,7 +788,7 @@ void loop()
 #endif
 
     // Random talking
-    if(!aq_talk::busy() && voiceEnd > 0 && std::difftime(now, voiceEnd) >= 60)
+    if(!aq_talk::busy() && voiceEnd > 0 && std::difftime(now, voiceEnd) >= M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC)
     {
         talkRandom();
     }
@@ -826,14 +834,15 @@ void loop()
     }
 
 
-#if 1
     // Auto request
     if(canRequest() && lastUpdate > 0 && std::difftime(now, lastUpdate) >= AUTO_REQUEST_INTERVAL_SEC)
     {
-        //_requestAdvertise();
+#ifdef ARDUINO_M5STACK_Core2
         _requestHimawari();
-    }
+#else        
+        _requestAdvertise();
 #endif
+    }
 
     // Keep about 30 FPS.
     auto end = millis();
