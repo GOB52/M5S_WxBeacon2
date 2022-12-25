@@ -126,22 +126,29 @@ void Ticker::setTitle(const char* title)
 
 void Ticker::setText(const char* str)
 {
-    if(!str || !str[0]) { return; }
-
     WB2_LOGD("%s", str);
-    if(strlen(str) >= STRING_LEN) { WB2_LOGE("BufferOver %zu", strlen(str)); }
 
+    _str.clear();
     _x = _telop->width();
-    strncpy(_str, str, sizeof(_str) - 1);
-    _str[sizeof(_str) - 1] = '\0';
-
-    auto tokens = gob::split(str, '#');
     _twidth = 0;
-    for(auto& e : tokens)
+    _str = gob::split(str, '#');
+    for(auto& e : _str)
     {
         if(e.length() == 0) { continue; }
-
         _twidth += _telop->textWidth(e.c_str() + (e[0] == '@' && isdigit(e[1])) * 2); // Command of change palette?
+    }
+    if(_twidth > 320)
+    {
+        auto allot = 320 - _twidth % 320;
+        int16_t left = 0;
+        std::vector<String> append;
+        for(auto& e : _str)
+        {
+            if(left > 320) { break; }
+            append.push_back(e);
+            left += _telop->textWidth(e.c_str() + (e[0] == '@' && isdigit(e[1])) * 2);
+        }
+        _str.insert(_str.end(), append.begin(), append.end());
     }
 }
 
@@ -152,13 +159,8 @@ void Ticker::pump()
     if(_str[0])
     {
         auto twid = _telop->width();
-        drawTelop(_str, _x, 0);
-        // Connect string if string width greater than width of _telop.
-        if(_twidth > twid && (_x + _twidth) < twid)
-        {
-            drawTelop(_str, _x + _twidth, 0);
-        }
-        // Infinity scroll string.
+        drawTelop(_x, 0);
+
         _x -= _speed;
         if(_twidth <= twid)
         {
@@ -192,27 +194,17 @@ void Ticker::render(m5gfx::M5GFX* dst)
     _decorLeft->pushSprite(dst, 0, dst->height() - _decorLeft->height(), 0);
 }
 
-void Ticker::drawTelop(const char* str, const int16_t x, const int16_t y)
+void Ticker::drawTelop(const int16_t x, const int16_t y)
 {
-    if(!_str[0] || x >= _telop->width()) { return; }
-    
     int16_t left = x;
     _telop->setTextColor(1);
 
-    auto tokens = gob::split(str, '#');
-    for(auto& e : tokens)
+    for(auto& e : _str)
     {
         if(left > 320) { break; }
         if(e.length() == 0) { continue; }
         const char* s = e.c_str();
         if(*s == '@' && isdigit(*(s+1))) { _telop->setTextColor((*(s+1)) - '0'); s += 2; } // Change palette
-
-        auto w = _telop->textWidth(s);
-        if(left >= 0 || left + w >= 0)
-        {
-            _telop->drawString(s, left, y);
-        }
-        left += w;
+        left += _telop->drawString(s, left, y);
     }
-
 }

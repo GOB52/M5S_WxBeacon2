@@ -33,7 +33,7 @@ class Ticker
     void pump();
     void render(m5gfx::M5GFX* dst);
 
-    constexpr static size_t STRING_LEN = 512;
+    //    constexpr static size_t STRING_LEN = 512;
     constexpr static int16_t GAP = 2;
     
     //Decoration left
@@ -54,13 +54,14 @@ class Ticker
     static const uint16_t TELOP_COLORS[];
     
   private:
-    void drawTelop(const char* str, const int16_t x, const int16_t y);
+    void drawTelop(const int16_t x, const int16_t y);
     
   private:
     // Telop
     LGFX_Sprite* _telop;
     //    gob::Sprite* _telop2;
-    char _str[STRING_LEN + 1/* \0 */];
+    //    char _str[STRING_LEN + 1/* \0 */];
+    std::vector<String> _str;
     int16_t _twidth;
     int16_t _x, _speed;
     // Decoration

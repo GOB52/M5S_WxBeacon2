@@ -304,7 +304,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
     aq_talk::playAquesTalk(vs.c_str(), 120);
 
     //    auto ts = formatString("TEMP %3.1fdegC HUM %3.1f%% AL %dlx UV %3.1f PRESURE %4.1fhPa N %3.1fdB DCMFT %3.1f WBGT %3.1f   ",
-    auto ts = formatString("気温:#@2%3.1f#@1℃ 湿度#@2:%3.1f#@1%% 明度:#@2%d#@1lx UV指数:#@2%3.1f #@1気圧:#@2%4.1f#@1hPa 騒音:#@2%3.1f#@1dB 不快指数:#@2%3.1f #@1WBGT:#@2%3.1f        ",
+    auto ts = formatString("#@1気温:#@2%3.1f#@1℃ 湿度#@2:%3.1f#@1%% 明度:#@2%d#@1lx UV指数:#@2%3.1f #@1気圧:#@2%4.1f#@1hPa 騒音:#@2%3.1f#@1dB 不快指数:#@2%3.1f #@1WBGT:#@2%3.1f        ",
                            (float)de->temperature(),
                            (float)de->relativeHumidity(),
                            (int)de->ambientLight(),
@@ -651,9 +651,6 @@ void setup()
     auto ret = aq_talk::initialize(aqtalkPriority, aqtalkCore, callbackOnEndAqTalk);
     WB2_LOGD("aq_talk::setup : %d", ret);
 
-    // Get advertise from WxBeacon2.
-    _requestAdvertise();
-
     //
     {
         goblib::datetime::LocalDateTime ldt = goblib::datetime::LocalDateTime::now();
@@ -669,6 +666,9 @@ void setup()
     M5.Display.startWrite(); // Occupy DMA Bus
 
     cpu_usage::initialize();
+
+    // Get advertise from WxBeacon2.
+    _requestAdvertise();
 }
 
 namespace
