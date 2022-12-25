@@ -114,7 +114,7 @@ void Ticker::setTitle(const char* title)
 {
     if(!title || !title[0]) { return; }
 
-    WB2_LOGD("%s", title);
+    WB2_LOGD("[%s]", title);
     
     _decorLeft->clear(); // fill 0
 
@@ -126,45 +126,50 @@ void Ticker::setTitle(const char* title)
 
 void Ticker::setText(const char* str)
 {
-    WB2_LOGD("%s", str);
+    WB2_LOGD("[%s]", str);
 
+    _telop->clear(0);
     _str.clear();
     _x = _telop->width();
     _twidth = 0;
+
     _str = gob::split(str, '#');
     for(auto& e : _str)
     {
         if(e.length() == 0) { continue; }
         _twidth += _telop->textWidth(e.c_str() + (e[0] == '@' && isdigit(e[1])) * 2); // Command of change palette?
     }
-    if(_twidth > 320)
+
+    auto twid = _telop->width();
+    if(_twidth > twid)
     {
-        auto allot = 320 - _twidth % 320;
+        auto allot = twid - _twidth % twid;
         int16_t left = 0;
         std::vector<String> append;
         for(auto& e : _str)
         {
-            if(left > 320) { break; }
+            if(left > twid) { break; }
             append.push_back(e);
             left += _telop->textWidth(e.c_str() + (e[0] == '@' && isdigit(e[1])) * 2);
         }
         _str.insert(_str.end(), append.begin(), append.end());
     }
+    //    WB2_LOGD("twidth:%d telop:%d str:%zu", _twidth, twid, _str.size());
 }
 
 void Ticker::pump()
 {
     // Telop
-    _telop->clear(0);
     if(_str[0])
     {
+        _telop->clear(0);
         auto twid = _telop->width();
         drawTelop(_x, 0);
 
         _x -= _speed;
         if(_twidth <= twid)
         {
-            if(_x < -_twidth) { _x = _telop->width(); }
+            if(_x < -_twidth) { _x = twid; }
         }
         else
         {
@@ -197,11 +202,13 @@ void Ticker::render(m5gfx::M5GFX* dst)
 void Ticker::drawTelop(const int16_t x, const int16_t y)
 {
     int16_t left = x;
+    auto twid = _telop->width();
+
     _telop->setTextColor(1);
 
     for(auto& e : _str)
     {
-        if(left > 320) { break; }
+        if(left > twid) { break; }
         if(e.length() == 0) { continue; }
         const char* s = e.c_str();
         if(*s == '@' && isdigit(*(s+1))) { _telop->setTextColor((*(s+1)) - '0'); s += 2; } // Change palette

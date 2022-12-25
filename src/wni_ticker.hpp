@@ -33,9 +33,6 @@ class Ticker
     void pump();
     void render(m5gfx::M5GFX* dst);
 
-    //    constexpr static size_t STRING_LEN = 512;
-    constexpr static int16_t GAP = 2;
-    
     //Decoration left
     constexpr static int16_t DECOR_LEFT_WIDTH = 160;
     constexpr static int16_t DECOR_LEFT_HEIGHT = 48;
@@ -44,12 +41,12 @@ class Ticker
     constexpr static int16_t DECOR_RIGHT_WIDTH = 32;
     constexpr static int16_t DECOR_RIGHT_HEIGHT = 48;
     // Telop
+    constexpr static int16_t GAP = 2;
     constexpr static int16_t TELOP_WIDTH = 320 - (DECOR_RIGHT_WIDTH + 2 * GAP + DECOR_LEFT_GAP);
     constexpr static int16_t TELOP_HEIGHT = 24; // height = fontHeight + (1 + 1)
-
+    // Colors
     constexpr static uint16_t BG_COLOR = ::lgfx::color565(255, 255, 255);
     constexpr static uint16_t DECOR_TEXT_COLOR = ::lgfx::color565(255, 255, 255);
-    // Decoration foreground colors for each level.
     static const uint16_t DECOR_FOREGROUND_COLORS[];
     static const uint16_t TELOP_COLORS[];
     
