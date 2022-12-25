@@ -384,14 +384,17 @@ void waitAquesTalk(void)
 
 void stopAquesTalk(void)
 {
-    if (is_talking) { is_talking = false; vTaskDelay(1); }
+    if (is_talking)
+    {
+        M5.Speaker.stop(m5spk_virtual_channel);
+        is_talking = false; vTaskDelay(1);
+    }
 }
 
 bool playAquesTalk(const char *koe, const uint16_t speed, const uint16_t lenPause)
 {
     stopAquesTalk();
     waitAquesTalk();
-
     
     // Split and store queue. (CAqTkPicoF_SetKoe has a length limitation)
     koeQueue.clear();
