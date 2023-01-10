@@ -25,6 +25,9 @@
 #include <gob_datetime.hpp>
 #include "cpu_usage.hpp"
 
+#include <gob_datetime_version.hpp>
+#include <gob_json_version.hpp>
+
 #ifdef ARDUINO_M5STACK_Core2
 #include "himawari/himawari.hpp"
 #include "himawari/himawari_task.hpp"
@@ -147,7 +150,7 @@ struct Weather
         }
         else
         {
-            snprintf(buf, sizeof(buf), "[%s] %s",
+            snprintf(buf, sizeof(buf), "#@1[%s] %s",
                      jma::officesCodeToString(oc),
                      jma::weatherCodeToString(wc));
         }
@@ -405,7 +408,7 @@ void callbackOnForecast(const jma::officecode_t oc, const jma::Forecast& fc, con
         updatedForecast = true;
         return;
     }
-        
+
     if(fc.existsTopWeatherCodes() && fc.existsTopTemp())
     {
         auto& wcodes = fc.TopWeatherCodes();
@@ -671,6 +674,8 @@ void setup()
         WB2_LOGI("PSRAM:size:%u free:%u", ESP.getPsramSize(), ESP.getFreePsram());
         WB2_LOGI("ESP-IDF Version %d.%d.%d",
                  (ESP_IDF_VERSION>>16) & 0xFF, (ESP_IDF_VERSION>>8)&0xFF, ESP_IDF_VERSION & 0xFF);
+        WB2_LOGI("gob_datetime Version %s", GOBLIB_DATETIME_VERSION_STRING);
+        WB2_LOGI("gob_json Version %s", GOB_JSON_VERSION_STRING);
     }
     M5.Display.startWrite(); // Occupy DMA Bus
 
@@ -678,11 +683,11 @@ void setup()
 
     // Get advertise from WxBeacon2.
     _requestAdvertise();
-}
 
-namespace
-{
-bool longPressA{false}, longPressB{false},longPressC{false};
+    // Setting for hold time(ms)
+    M5.BtnA.setHoldThresh(1500);
+    M5.BtnB.setHoldThresh(1500);
+    M5.BtnC.setHoldThresh(1500);
 }
 
 // Main loop
@@ -691,71 +696,57 @@ void loop()
     auto start = millis();
     M5.update();
 
-    // WARNING : If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
-    // WARNING : After the mode change, Abort system.
-    /*
-      C button
-      long press : Set beacon mode to GeneralBroadcaster2 for this application.
-      press : show/hide ticker
-    */
-    if(!longPressC && M5.BtnC.pressedFor(1000) && canRequest())
+    if(canRequest())
     {
-        longPressC = true;
-        WB2_LOGI("Set beacon mode to broadcast mode");
-        auto b = changeBeaconMode();
-        WB2_LOGI("Result : %d", b);
-        abort();
-    }
-    if(M5.BtnC.wasReleased())
-    {
-        if(!longPressC)
+        // WARNING : If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
+        // WARNING : After the mode change, Abort system.
+        /*
+          C button
+          long press : Set beacon mode to GeneralBroadcaster2 for this application.
+          click : show/hide ticker
+        */
+        if(M5.BtnC.wasHold())
+        {
+            WB2_LOGI("Set beacon mode to broadcast mode");
+            auto b = changeBeaconMode();
+            WB2_LOGI("Result : %d", b);
+            abort();
+        }
+        else if(M5.BtnC.wasClicked())
         {
             ticker->show(!ticker->isShow());
             forceRender = true;
         }
-        longPressC = false;
-    }
-
-    /*
-      B button
-      long press : Set default setting for WNI aplication.
-      press : (none)
-    */
-    if(!longPressB && M5.BtnB.pressedFor(1000) && canRequest())
-    {
-        longPressB = true;
-        WB2_LOGI("Set default settings");
-        aq_talk::stopAquesTalk();
-        auto b = changeDefaultSetting();
-        WB2_LOGI("Result : %d", b);
-        abort();
-    }
-    if(M5.BtnB.wasReleased())
-    {
-        if(!longPressB)
+        /*
+          B button
+          long press : Set default setting for WNI aplication.
+          click : (none)
+        */
+        if(M5.BtnB.wasHold())
         {
-            // nop
+            WB2_LOGI("Set default settings");
+            aq_talk::stopAquesTalk();
+            auto b = changeDefaultSetting();
+            WB2_LOGI("Result : %d", b);
+            abort();
         }
-        longPressB = false;
-    }
-
-    /*
-      A button
-      long press : Obtain forecast force.
-      press : Obtain beacon datat force.
-    */
-    if(!longPressA && M5.BtnA.pressedFor(1000))
-    {
-        longPressA = true;
-        _requestForecast();
-    }
-    if(M5.BtnA.wasReleased())
-    {
-        if(!longPressA)
+        else if(M5.BtnB.wasClicked())
+        {
+            /* Nop */
+        }
+        /*
+          A button
+          long press : Obtain forecast force.
+          click : Obtain beacon datat force.
+        */
+        if(M5.BtnA.wasHold())
+        {
+            _requestForecast();
+        }
+        else if(M5.BtnA.wasClicked())
         {
             _requestAdvertise();
         }
-        longPressA = false;
     }
 
     time_t now{};
