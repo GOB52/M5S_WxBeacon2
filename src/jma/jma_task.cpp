@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include <JsonStreamingParser2.h>
+#include <gob_json.hpp>
 #include "jma_task.hpp"
 #include "jma_forecast_handler.hpp"
 #include "wb2/wxbeacon2_log.hpp"
@@ -140,9 +140,8 @@ void jma_forecast_task(void*)
                 }
 
                 // parse JSON
-                JsonStreamingParser parser;
                 JMAHandler handler;
-                parser.setHandler(&handler);
+                goblib::json::StreamingParser parser(&handler);
                 while(client.available()) { parser.parse(client.read()); }
 
                 if(callbackOnForecast) { callbackOnForecast(requestTable[index], handler._forecast, handler._weeklyForecast); }

@@ -1,122 +1,90 @@
 
-#include <JsonStreamingParser2.h>
+#include <gob_json.hpp>
 #include "jma_forecast_handler.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 
-namespace
-{
-#ifndef NDEBUG
-String fullpath(ElementPath& path)
-{
-    char buf[256] = "";
-    path.toString(buf);
-    return String(buf);
-}
-#endif
-//
-}
+using goblib::json::ElementPath;
+using goblib::json::ElementValue;
+using goblib::json::ElementBase;
+using goblib::json::Element;
+using Delegater = goblib::json::DelegateHandler::Delegater;
+using goblib::datetime::OffsetDateTime;
 
-void JMAHandler::startObject(ElementPath path)
+// Custom helper for specific types.
+template<typename T> struct CustomElement : public Element<T>
 {
-    // Delegate processing to object.
-    auto obj = currentObject();
-    if(obj)
+    CustomElement(const char*k, T* vp) : Element<T>(k, vp) {}
+    virtual void store(const ElementValue& ev, const int index = -1) override { _store(ev, index); }
+
+    // OffsetDateTime
+    template<typename U = T,
+             typename std::enable_if<std::is_same<U, OffsetDateTime>::value, std::nullptr_t>::type = nullptr>
+    void _store(const ElementValue& ev, const int) { *(this->value) = OffsetDateTime::parse(ev.getString()); }
+    // vector<OffsetDateTime>
+    template<typename U = T,
+             typename std::enable_if<goblib::json::is_std_vector<U>::value && std::is_same<typename U::value_type, OffsetDateTime>::value, std::nullptr_t>::type = nullptr>
+    void _store(const ElementValue& ev, const int) { this->value->emplace_back(ev.getString()); }
+    // vector<Reliability>
+    template<typename U = T,
+             typename std::enable_if<goblib::json::is_std_vector<U>::value && std::is_same<typename U::value_type, jma::Reliability>::value, std::nullptr_t>::type = nullptr>
+    void _store(const ElementValue& ev, const int) { this->value->emplace_back(ev.getString()); }
+};
+
+// Handler
+void JMAHandler::startObject(const ElementPath& path)
+{
+    //    WB2_LOGV("%s:index:%d count:%d", path.toString().c_str(), path.getIndex(), path.getCount());
+    Delegater* obj = nullptr;
+    // pushDelegater if top level object in top array.
+    if(path.getCount() == 1)
     {
-        auto nobj = obj->startObject(path);
-        if(!nobj) { WB2_LOGD("NullObj:%s", fullpath(path).c_str()); }
-        assert(nobj);
-        _objects.push(nobj);
-        return;
+        switch(path.getIndex())
+        {
+        case 0: obj = new Forecast(_forecast); break;
+        case 1: obj = new WeeklyForecast(_weeklyForecast); break;
+        }
+        if(obj) {  pushDelegater(obj); return; }
+        WB2_LOGE("Missing object");
     }
-
-    Object* nobj = nullptr;
-    switch(path.getIndex())
-    {
-    case 0: nobj = new Forecast(_forecast); break;
-    case 1: nobj = new WeeklyForecast(_weeklyForecast); break;
-    }
-    if(!nobj) { WB2_LOGD("NullObj:%s", fullpath(path).c_str()); nobj = new Object(); }
-    _objects.push(nobj);
-}
-
-void JMAHandler::endObject(ElementPath path)
-{
-    // Delegate processing to object.
-    auto obj = currentObject();
-    if(obj)
-    {
-        obj->endObject(path);
-        delete _objects.top();
-        _objects.pop();
-    }
-}
-
-void JMAHandler::startArray(ElementPath path)
-{
-    // Delegate processing to object.
-    auto obj = currentObject();
-    if(obj) { obj->startArray(path); }
-}
-
-void JMAHandler::endArray(ElementPath path)
-{
-    // Delegate processing to object.
-    auto obj = currentObject();
-    if(obj) { obj->endArray(path); }
-}
-
-void JMAHandler::value(ElementPath path, ElementValue value)
-{
-    // Delegate processing to object.
-    auto obj = currentObject();
-    if(obj) { obj->value(path, value); }
-}
-
-void JMAHandler::endDocument()
-{
-    //    WB2_LOGD("End of Document: objects %zu", _objects.size());
+    DelegateHandler::startObject(path);
 }
 
 // Area
-void JMAHandler::Area::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Area::value(const  ElementPath& path, const ElementValue& value)
 {
     Element<decltype(_v._name)> e_name { "name",  &_v._name };
     Element<decltype(_v._code)> e_code { "code",  &_v._code };
     ElementBase* elements[] = { &e_name, &e_code };
-    for(auto& e : elements)
-    {
-        if(e->key == path.getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == path.getKey()) { e->store(value); return; } }
 }
 
 // ForeeCast
-JMAHandler::Object* JMAHandler::Forecast::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::startObject(const ElementPath& path)
 {
-    Object* obj = nullptr;
+    //    WB2_LOGV("%s:index:%d count:%d", path.toString().c_str(), path.getIndex(), path.getCount());
+    Delegater* obj = nullptr;
     switch(path.getIndex())
     {
     case 0: obj = new TimeSeriesWeather(_v._tsWeather); break;
     case 1: obj = new TimeSeriesPop(_v._tsPop); break;
     case 2: obj = new TimeSeriesTemp(_v._tsTemp); break;
     }
-    return obj ? obj : new Object();
+    return obj ? obj : Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::value(const ElementPath& path, const ElementValue& value)
 {
-    Element<decltype(_v._publishingOffice)> e_publishingOffice { "publishingOffice",  &_v._publishingOffice };
-    Element<decltype(_v._reportDatetime)>   e_reportDatetime   { "reportDatetime",    &_v._reportDatetime   };
+    Element<decltype(_v._publishingOffice)>       e_publishingOffice { "publishingOffice",  &_v._publishingOffice };
+    CustomElement<decltype(_v._reportDatetime)>   e_reportDatetime   { "reportDatetime",    &_v._reportDatetime   };
     ElementBase* elements[] = { &e_publishingOffice, &e_reportDatetime };
-    for(auto& e : elements)
-    {
-        if(e->key == path.getKey()) { e->store(value); return; }
-
-    }
+    WB2_LOGV("[%s] %d <%s>", path.toString().c_str(), value.isString(), value.getString());
+    for(auto& e : elements) { if(*e == path.getKey()) { e->store(value); return; } }
+    WB2_LOGE("oops!");
 }
 
 // Forecast::TimeSeriesWeather
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesWeather::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesWeather::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -124,33 +92,30 @@ JMAHandler::Object* JMAHandler::Forecast::TimeSeriesWeather::startObject(Element
         _v._areas.emplace_back();
         return new TimeSeriesWeather::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesWeather::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesWeather::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
-    Element<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
+    CustomElement<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
     ElementBase* elements[] = { &e_td };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // Forecast::TimeSeriesWeather::Areas
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesWeather::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesWeather::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesWeather::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesWeather::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
@@ -161,15 +126,12 @@ void JMAHandler::Forecast::TimeSeriesWeather::Areas::value(ElementPath& path, El
     //    Element<decltype(_v._waves)>        e_waves    { "waves",         &_v._waves };
     //    ElementBase* elements[] = { &e_codes, &e_weathers, &e_winds, &e_waves };
     ElementBase* elements[] = { &e_codes };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) {if(*e == parent->getKey()) { e->store(value); return; }}
 }
 
 // Forecast::TimeSeriesPop
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesPop::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesPop::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -177,48 +139,42 @@ JMAHandler::Object* JMAHandler::Forecast::TimeSeriesPop::startObject(ElementPath
         _v._areas.emplace_back();
         return new TimeSeriesPop::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesPop::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesPop::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
-    Element<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
+    CustomElement<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
     ElementBase* elements[] = { &e_td };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // Forecast::TimeSeriesPop::Areas
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesPop::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesPop::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesPop::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesPop::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
     
     Element<decltype(_v._pops)> e_pops    { "pops",  &_v._pops };
     ElementBase* elements[] = { &e_pops };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // Forecast::TimeSeriesTemp
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesTemp::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesTemp::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -226,50 +182,44 @@ JMAHandler::Object* JMAHandler::Forecast::TimeSeriesTemp::startObject(ElementPat
         _v._areas.emplace_back();
         return new TimeSeriesTemp::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesTemp::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesTemp::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
-    Element<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
+    CustomElement<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
     ElementBase* elements[] = { &e_td };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // Forecast::TimeSeriesTemp::Areas
-JMAHandler::Object* JMAHandler::Forecast::TimeSeriesTemp::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::Forecast::TimeSeriesTemp::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::Forecast::TimeSeriesTemp::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::Forecast::TimeSeriesTemp::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
     
     Element<decltype(_v._temps)> e_temps    { "temps",  &_v._temps };
     ElementBase* elements[] = { &e_temps };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForeeCast
-JMAHandler::Object* JMAHandler::WeeklyForecast::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::startObject(const ElementPath& path)
 {
-    Object* obj = nullptr;
+    Delegater* obj = nullptr;
     auto parent = path.getParent();
     
     if(String("timeSeries") == parent->getKey())
@@ -288,22 +238,20 @@ JMAHandler::Object* JMAHandler::WeeklyForecast::startObject(ElementPath& path)
     {
         obj = new PrecipAverage(_v._precipAverage);
     }
-    return obj ? obj : new Object();
+    return obj ? obj : Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::value(const ElementPath& path, const ElementValue& value)
 {
     Element<decltype(_v._publishingOffice)> e_publishingOffice { "publishingOffice",  &_v._publishingOffice };
-    Element<decltype(_v._reportDatetime)>   e_reportDatetime   { "reportDatetime",    &_v._reportDatetime   };
+    CustomElement<decltype(_v._reportDatetime)>   e_reportDatetime   { "reportDatetime",    &_v._reportDatetime   };
     ElementBase* elements[] = { &e_publishingOffice, &e_reportDatetime };
-    for(auto& e : elements)
-    {
-        if(e->key == path.getKey()) { e->store(value); return; }
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == path.getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::TimeSeriesWeather
-JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesWeather::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TimeSeriesWeather::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -311,50 +259,44 @@ JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesWeather::startObject(E
         _v._areas.emplace_back();
         return new TimeSeriesWeather::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TimeSeriesWeather::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TimeSeriesWeather::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
-    Element<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
+    CustomElement<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
     ElementBase* elements[] = { &e_td };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //   WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::TimeSeriesWeather::Areas
-JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesWeather::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TimeSeriesWeather::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TimeSeriesWeather::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TimeSeriesWeather::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
     
     Element<decltype(_v._weatherCodes)>  e_codes         { "weatherCodes",  &_v._weatherCodes };
     Element<decltype(_v._pops)>          e_pops          { "pops",          &_v._pops };
-    Element<decltype(_v._reliabilities)> e_reliabilities { "reliabilities", &_v._reliabilities };
+    CustomElement<decltype(_v._reliabilities)> e_reliabilities { "reliabilities", &_v._reliabilities };
     ElementBase* elements[] = { &e_codes, &e_pops, &e_reliabilities };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) {if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::TimeSeriesTemp
-JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesTemp::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TimeSeriesTemp::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -362,33 +304,30 @@ JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesTemp::startObject(Elem
         _v._areas.emplace_back();
         return new TimeSeriesTemp::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TimeSeriesTemp::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TimeSeriesTemp::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
-    Element<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
+    CustomElement<decltype(_v._timeDefines)> e_td { "timeDefines",  &_v._timeDefines };
     ElementBase* elements[] = { &e_td };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::TimeSeriesTemp::Areas
-JMAHandler::Object* JMAHandler::WeeklyForecast::TimeSeriesTemp::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TimeSeriesTemp::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TimeSeriesTemp::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TimeSeriesTemp::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
@@ -400,15 +339,12 @@ void JMAHandler::WeeklyForecast::TimeSeriesTemp::Areas::value(ElementPath& path,
     Element<decltype(_v._tempsMaxUpper)>  e_tempsMaxU { "tempsMaxUpper", &_v._tempsMaxUpper };
     Element<decltype(_v._tempsMaxLower)>  e_tempsMaxL { "tempsMaxLower", &_v._tempsMaxLower };
     ElementBase* elements[] = { &e_tempsMin, &e_tempsMinU, &e_tempsMinL, &e_tempsMax, &e_tempsMaxU, &e_tempsMaxL };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::TempAverage
-JMAHandler::Object* JMAHandler::WeeklyForecast::TempAverage::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TempAverage::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -416,24 +352,25 @@ JMAHandler::Object* JMAHandler::WeeklyForecast::TempAverage::startObject(Element
         _v._areas.emplace_back();
         return new TempAverage::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TempAverage::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TempAverage::value(const ElementPath& path, const ElementValue& value)
 {
+    // No value is obtained.
 }
 
 // WeeklyForecast::TempAverage::Areas
-JMAHandler::Object* JMAHandler::WeeklyForecast::TempAverage::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::TempAverage::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::TempAverage::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::TempAverage::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
@@ -441,15 +378,12 @@ void JMAHandler::WeeklyForecast::TempAverage::Areas::value(ElementPath& path, El
     Element<decltype(_v._min)>  e_min { "min", &_v._min };
     Element<decltype(_v._max)>  e_max { "max", &_v._max };
     ElementBase* elements[] = { &e_min, &e_max };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 // WeeklyForecast::PrecipAverage
-JMAHandler::Object* JMAHandler::WeeklyForecast::PrecipAverage::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::PrecipAverage::startObject(const ElementPath& path)
 {
     auto parent = path.getParent();
     if(parent && String("areas") == parent->getKey())
@@ -457,24 +391,24 @@ JMAHandler::Object* JMAHandler::WeeklyForecast::PrecipAverage::startObject(Eleme
         _v._areas.emplace_back();
         return new PrecipAverage::Areas(_v._areas.back());
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::PrecipAverage::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::PrecipAverage::value(const ElementPath& path, const ElementValue& value)
 {
 }
 
 // WeeklyForecast::PrecipAverage::Areas
-JMAHandler::Object* JMAHandler::WeeklyForecast::PrecipAverage::Areas::startObject(ElementPath& path)
+Delegater* JMAHandler::WeeklyForecast::PrecipAverage::Areas::startObject(const ElementPath& path)
 {
     if(String("area") == path.getKey())
     {
         return new JMAHandler::Area(_v._area);
     }
-    return new Object();
+    return Delegater::startObject(path);
 }
 
-void JMAHandler::WeeklyForecast::PrecipAverage::Areas::value(ElementPath& path, ElementValue& value)
+void JMAHandler::WeeklyForecast::PrecipAverage::Areas::value(const ElementPath& path, const ElementValue& value)
 {
     auto parent = path.getParent();
     if(!parent) { return; }
@@ -482,44 +416,26 @@ void JMAHandler::WeeklyForecast::PrecipAverage::Areas::value(ElementPath& path, 
     Element<decltype(_v._min)>  e_min { "min", &_v._min };
     Element<decltype(_v._max)>  e_max { "max", &_v._max };
     ElementBase* elements[] = { &e_min, &e_max };
-    for(auto& e : elements)
-    {
-        if(e->key == parent->getKey()) { e->store(value); return; }
-
-    }
+    //    WB2_LOGV("[%s] <%s>", path.toString().c_str(), value.toString().c_str());
+    for(auto& e : elements) { if(*e == parent->getKey()) { e->store(value); return; } }
 }
 
 #if 0
+namespace
+{
+const char jma_json[] =
+R"***(
+[{"publishingOffice":"金沢地方気象台","reportDatetime":"2023-01-10T11:00:00+09:00","timeSeries":[{"timeDefines":["2023-01-10T11:00:00+09:00","2023-01-11T00:00:00+09:00","2023-01-12T00:00:00+09:00"],"areas":[{"area":{"name":"加賀","code":"170010"},"weatherCodes":["200","101","101"],"weathers":["くもり　所により　夕方　まで　雨か雪","晴れ　昼前　から　夕方　くもり","晴れ　時々　くもり"],"winds":["北の風　海上　では　北西の風　やや強く","南の風　海上　では　南西の風　やや強く","南の風　後　南西の風"],"waves":["３メートル　うねり　を伴う","２メートル　後　１．５メートル","１．５メートル　後　１メートル"]},{"area":{"name":"能登","code":"170020"},"weatherCodes":["200","111","201"],"weathers":["くもり　所により　夕方　まで　雨か雪","晴れ　昼前　から　くもり","くもり　時々　晴れ"],"winds":["北西の風　やや強く　後　西の風","南の風　海上　では　南西の風　やや強く","南の風"],"waves":["４メートル　後　３メートル　うねり　を伴う","２．５メートル　後　２メートル","２メートル"]}]},{"timeDefines":["2023-01-10T12:00:00+09:00","2023-01-10T18:00:00+09:00","2023-01-11T00:00:00+09:00","2023-01-11T06:00:00+09:00","2023-01-11T12:00:00+09:00","2023-01-11T18:00:00+09:00"],"areas":[{"area":{"name":"加賀","code":"170010"},"pops":["30","10","0","10","10","0"]},{"area":{"name":"能登","code":"170020"},"pops":["30","10","10","20","20","10"]}]},{"timeDefines":["2023-01-10T09:00:00+09:00","2023-01-10T00:00:00+09:00","2023-01-11T00:00:00+09:00","2023-01-11T09:00:00+09:00"],"areas":[{"area":{"name":"金沢","code":"56227"},"temps":["6","6","0","9"]},{"area":{"name":"輪島","code":"56052"},"temps":["4","5","0","9"]}]}]},{"publishingOffice":"金沢地方気象台","reportDatetime":"2023-01-10T11:00:00+09:00","timeSeries":[{"timeDefines":["2023-01-11T00:00:00+09:00","2023-01-12T00:00:00+09:00","2023-01-13T00:00:00+09:00","2023-01-14T00:00:00+09:00","2023-01-15T00:00:00+09:00","2023-01-16T00:00:00+09:00","2023-01-17T00:00:00+09:00"],"areas":[{"area":{"name":"石川県","code":"170000"},"weatherCodes":["101","101","201","203","202","206","206"],"pops":["","20","40","70","60","50","50"],"reliabilities":["","","C","A","B","C","C"]}]},{"timeDefines":["2023-01-11T00:00:00+09:00","2023-01-12T00:00:00+09:00","2023-01-13T00:00:00+09:00","2023-01-14T00:00:00+09:00","2023-01-15T00:00:00+09:00","2023-01-16T00:00:00+09:00","2023-01-17T00:00:00+09:00"],"areas":[{"area":{"name":"金沢","code":"56227"},"tempsMin":["","2","4","7","4","3","4"],"tempsMinUpper":["","5","5","9","6","5","6"],"tempsMinLower":["","1","2","3","1","1","2"],"tempsMax":["","14","16","16","9","8","8"],"tempsMaxUpper":["","16","18","18","13","11","11"],"tempsMaxLower":["","13","15","14","7","6","6"]}]}],"tempAverage":{"areas":[{"area":{"name":"金沢","code":"56227"},"min":"1.2","max":"7.1"}]},"precipAverage":{"areas":[{"area":{"name":"金沢","code":"56227"},"min":"39.9","max":"67.2"}]}}]
+)***";
+//
+}
 void test_json()
 {
-    auto mem = esp_get_free_heap_size();
-    WB2_LOGD("before:%u", mem);
-
-    {    
-        JsonStreamingParser parser;
-        JMAHandler handler;
-        parser.setHandler(&handler);
-
-
-        for(auto& e : test)
-        {
-            parser.parse(e);
-        }
-        printf("--------------------\n");
-        printf("%s\n", handler._forecast.toString().c_str());
-        printf("--------------------\n");
-        printf("%s\n", handler._weeklyForecast.toString().c_str());
-    }
-
-    auto mem2 = esp_get_free_heap_size();
-    WB2_LOGD("after:%u diff:%d", mem2, mem2 - mem);
-
-    {    
-        JsonStreamingParser parser;
-        JMAHandler handler;
-        parser.setHandler(&handler);
-    }
-    auto mem3 = esp_get_free_heap_size();
-    WB2_LOGD("after:%u diff:%d", mem3, mem3 - mem2);
+    JMAHandler handler;
+    goblib::json::StreamingParser parser(&handler);
+    for(auto& e : jma_json) { parser.parse(e); }
+    WB2_LOGD("%s", handler._forecast.toString().c_str());
+    WB2_LOGD("%s", handler._weeklyForecast.toString().c_str());
+    
 }
 #endif
