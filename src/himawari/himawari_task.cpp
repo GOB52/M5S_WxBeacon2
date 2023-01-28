@@ -200,7 +200,7 @@ void himawari_task(void*)
                 break;
             }
 
-            gtry = 8;
+            gtry = 16;
             do
             {
                 while(http.connected() && client.available())
@@ -212,14 +212,14 @@ void himawari_task(void*)
                         read -= len;
                         off += len;
                         WB2_LOGD("len:%zu off:%zu ava:%zu", len, off, client.available());
-                        delay(50); // Insert appropriate delay to continue reading the stream.
+                        delay(100); // Insert appropriate delay to continue reading the stream.
                     }
                     szTmp -= std::min(blockSize, szTmp);
                     if(callbackOnProgress) { callbackOnProgress(off, jpgsz); }
-                    delay(50);
+                    delay(100);
                 }
                 WB2_LOGD("http:%d", http.connected());
-                if(off < jpgsz) { WB2_LOGD("Not enough read"); delay(200); }
+                if(off < jpgsz) { WB2_LOGD("Not enough read"); delay(500); }
             }while(off < jpgsz && gtry--);
 
             WB2_LOGD("off:%zu/%zu", off, jpgsz);
