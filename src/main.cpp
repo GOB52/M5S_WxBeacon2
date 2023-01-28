@@ -8,6 +8,7 @@
 */
 #include <M5Unified.h>
 #include <M5GFX.h>
+#include <utility/M5Timer.h>
 #include <esp_system.h>
 #include <esp_bt.h> // esp_bt_controller_mem_release
 #include <esp_random.h> // esp_random() is hardware RNG. (No random seed initialization is required)
@@ -86,8 +87,6 @@ HimawariScreen* himawariScreen;
 #endif
 ProgressIcon* progress;
 bool forceRender = true; // Force rendering all
-time_t lastUpdate = -1;
-time_t voiceEnd = -1;
 
 // For task settings. (piority low:0) [Beware of WDT]
 constexpr UBaseType_t advertisePriority = 1;
@@ -109,6 +108,8 @@ constexpr BaseType_t speakerCore = 0;
 bool existsBeacon = false;
 WxBeacon2::AdvertiseData advertiseData;
 bool updatedAdvertise = false;
+M5Timer timer;
+int_fast8_t requestTimerId{-1}, talkTimerId{-1};
 
 //
 struct Weather
@@ -501,13 +502,6 @@ void playForecast()
 }
 
 // --------------------------------
-// Callback on End of aqtalk.
-void callbackOnEndAqTalk()
-{
-    std::time(&voiceEnd);
-}
-
-// --------------------------------
 #ifdef ARDUINO_M5STACK_Core2
 // Request himawari image
 void _requestHimawari()
@@ -587,9 +581,46 @@ PROGMEM static const char t2[] = "weza-roido'una'na-i wa arimasen";
 const char* talkTable[] = { t0, t1, t2 };
 void talkRandom()
 {
-    auto idx = esp_random() % gob::size(talkTable);
-    aq_talk::playAquesTalk(talkTable[idx], 110);
+    if(!aq_talk::busy())
+    {
+        auto idx = esp_random() % gob::size(talkTable);
+        aq_talk::playAquesTalk(talkTable[idx], 110);
+    }
 }
+
+// --------------------------------
+// Callback on End of aqtalk.
+void callbackOnEndAqTalk()
+{
+    timer.restartTimer(talkTimerId);
+    WB2_LOGV("restart talkRandom timer");
+}
+
+// --------------------------------
+// Timer
+void timerCallbackRequest()
+{
+    if(canRequest())
+    {
+#ifdef ARDUINO_M5STACK_Core2
+        _requestHimawari();
+#else
+        _requestAdvertise();
+#endif
+        return;
+    }
+    // Retry
+    requestTimerId = timer.setTimeout(1000 /*ms*/, timerCallbackRequest);
+    WB2_LOGI("Retry timercallback %d", requestTimerId);
+}
+
+void resetRequestTimer()
+{
+    timer.deleteTimer(requestTimerId);
+    requestTimerId = timer.setTimeout(M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC * 1000 /*ms*/, timerCallbackRequest);
+    WB2_LOGV("Reset request timer %d", requestTimerId);
+}
+
 //
 }
 
@@ -684,6 +715,10 @@ void setup()
     // Get advertise from WxBeacon2.
     _requestAdvertise();
 
+    // Timer callback
+    requestTimerId = timer.setTimeout(M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC * 1000 /*ms*/, timerCallbackRequest);
+    talkTimerId = timer.setInterval(M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC * 1000 /*ms*/, talkRandom);
+    
     // Setting for hold time(ms)
     M5.BtnA.setHoldThresh(1500);
     M5.BtnB.setHoldThresh(1500);
@@ -737,7 +772,7 @@ void loop()
         /*
           A button
           long press : Obtain forecast force.
-          click : Obtain beacon datat force.
+          click : Obtain beacon data force.
         */
         if(M5.BtnA.wasHold())
         {
@@ -755,7 +790,7 @@ void loop()
     // Play latest advertise data if exists.
     if(updatedAdvertise)
     {
-        std::time(&lastUpdate);
+        resetRequestTimer();
         updatedAdvertise = false;
         playAdvertiseData(advertiseData);
     }
@@ -763,7 +798,7 @@ void loop()
     // Play latest forecast
     if(updatedForecast)
     {
-        std::time(&lastUpdate);
+        resetRequestTimer();
         updatedForecast = false;
         playForecast();
     }
@@ -772,18 +807,12 @@ void loop()
 #ifdef ARDUINO_M5STACK_Core2
     if(updatedHimawari)
     {
-        std::time(&lastUpdate);
+        resetRequestTimer();
         updatedHimawari = false;
         drawHimawari();
     }
 #endif
 
-    // Random talking
-    if(!aq_talk::busy() && voiceEnd > 0 && std::difftime(now, voiceEnd) >= M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC)
-    {
-        talkRandom();
-    }
-    
     // Update
     avatar->pump();
     ticker->pump();
@@ -820,21 +849,15 @@ void loop()
                           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         M5.Display.setCursor(128, 136);
         M5.Display.printf("c0:%03.1f c1:%03.1f", cpu_usage::cpu0(), cpu_usage::cpu1());
+        M5.Display.setCursor(128, 144);
+        M5.Display.printf("tmR:%02d tmT:%02d tmA:%02d", requestTimerId, talkTimerId, timer.getNumAvailableTimers());
+
         cpu_usage::reset();
 #endif
     }
 
-
-    // Auto request
-    if(canRequest() && lastUpdate > 0 && std::difftime(now, lastUpdate) >= AUTO_REQUEST_INTERVAL_SEC)
-    {
-#ifdef ARDUINO_M5STACK_Core2
-        _requestHimawari();
-#else        
-        _requestAdvertise();
-#endif
-    }
-
+    timer.run();
+    
     // Keep about 30 FPS.
     auto end = millis();
 #ifdef M5S_WXBEACON2_DEBUG_INFO
