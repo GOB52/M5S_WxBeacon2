@@ -47,4 +47,9 @@
 !/src/res/wifi.cpp
 !/src/res/bt.cpp
 !/src/res/jpmap.cpp
+!/src/res/dummy_face.cpp
+!/src/res/dummy_mo.cpp
+!/src/res/dummy_mc.cpp
+!/src/res/dummy_logo.cpp
+!/src/res/w???.cpp
 

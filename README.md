@@ -16,7 +16,7 @@ https://user-images.githubusercontent.com/26270227/186464005-bfc6b1c4-3f5c-4e7f-
 
 M5Stack Basic, Gray, Core2 にて WxBeacon2 や気象庁からデータを取得し、
 [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) で喋らせるアプリケーションです。  
-どうせならウェザーニュースLiVE のマスコット、ポン子こと [WEATHEROID TypeA Airi](https://twitter.com/typea_airi) ちゃんに喋らせようという事で、アバターはポン子ちゃんとなっております。
+どうせならウェザーニュースLiVE のマスコット、ポン子こと [WEATHEROID TypeA Airi](https://twitter.com/typea_airi) ちゃんに喋らせようという事で、アバターポン子ちゃんを作りました。
 
 
 ## 必要なもの
@@ -34,18 +34,22 @@ WxBeacon2 でなく当該製品でも動作すると思われます(手元に無
 ## コンパイル
 
 ### 依存ライブラリ
-* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.1 or later
-* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.1 or later
+* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.2#develop or later <-- リリース後書き換え
+* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.2 or later
 * [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0 or later
-* [json-streaming-parser2]( https://github.com/mrfaptastic/json-streaming-parser2.git ) 2.1.0 or later
-* [gob_datetime](  https://github.com/GOB52/gob_datetime.git) 0.1.1 or later
+* [gob_json](https://github.com/GOB52/gob_json.git) 0.0.3 or later
+* [gob_datetime](https://github.com/GOB52/gob_datetime.git) 0.1.1 or later
 * [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) 2.21 or later  
 AquesTalk ESP32 は [こちら](https://www.a-quest.com/download.html) よりダウンロード後、プロジェクトの lib フォルダ(無ければ作成)に展開してください。
 
 
 ### 画像リソース
+初期状態ではダミーとして私が作った顔とロゴが使用されます。
+<img src="doc/dummy.jpg" alt="dummy" title="dummy" width="189" height="252">
+
 **権利上の問題でポン子ちゃんの画像などは当リポジトリには含まれません。**  
-自分で以下の条件を満たす画像をソースファイルとして共にコンパイルする必要があります。
+ポン子ちゃんや他の画像を使いたい場合、自分で以下の条件を満たす画像を作成し、ソースファイルとして共にコンパイルする必要があります。  
+
 
 #### 画像フォーマット
 Basic,Gray での動作の都合上、メモリ使用料削減の為に 4bpp,1bpp を扱います。
@@ -69,45 +73,6 @@ Windows bitmap 48 px x 32 px 4 bpp (16色) パレット 0 番は透過色。顔�
 * WNI ロゴ  
 Windows bitmap 32 px x 32 px 1 bpp (2色) パレット 0 番は透過色。ティッカーに透過色を用いて上書きされる。
 ![logo](./doc/logo.png)
-
-* 天気アイコン (30種類)  
-PNG 32 px x 24 px 2 bpp (4色) パレットは自由、透過無し。
-![icons](./doc/w406.png)  
-https://weathernews.jp/s/topics/img/wxicon/ を参考にすると良いでしょう。
-
-| リソース名 |内容|
----|---
-|w100| 晴 |
-|w101|晴時々曇|
-|w102|晴一時雨|
-|w104|晴一時雪|
-|w110|晴後時々曇|
-|w112|晴後一時雨|
-|w115|晴後一時雪|
-|w200|曇|
-|w201|曇時々晴|
-|w202|曇一時雨|
-|w204|曇一時雪|
-|w210|曇後時々晴|
-|w212|曇後一時雨|
-|w215|曇後一時雪|
-|w300|雨|
-|w301|雨時々晴|
-|w302|雨時々止む|
-|w303|雨時々雪|
-|w308|雨で暴風を伴う|
-|w311|雨後晴|
-|w313|雨後曇|
-|w314|雨後時々雪|
-|w400|雪|
-|w401|雪時々晴|
-|w402|雪時々止む|
-|w403|雪時々雨|
-|w406|風雪強い|
-|w411|雪後晴|
-|w413|雪後曇|
-|w414|雪後雨|
-
 
 #### ソースファイル化
 全てのリソースについて行ってください。 ponko_face.bmp における例を示します。
