@@ -32,7 +32,7 @@ struct ScopedWB2Client
     ~ScopedWB2Client()
     {
         _client.disconnect();
-        NimBLEDevice::deinit(false);
+        NimBLEDevice::deinit(true);
     }
     WxBeacon2Client& client() { return _client; }
   private:    
@@ -63,7 +63,7 @@ void wb2_advertise_task(void*)
         wb2address = cb.address();
         scan->stop();
         scan->clearResults();
-        NimBLEDevice::deinit(false);
+        NimBLEDevice::deinit(true);
         delay(100);
 
         WB2_LOGI("End of scanning. detected :%d", cb.detected());
