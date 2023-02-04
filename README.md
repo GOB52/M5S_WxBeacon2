@@ -2,16 +2,21 @@
 
 https://user-images.githubusercontent.com/26270227/186464005-bfc6b1c4-3f5c-4e7f-b2bc-fb4b9d4b0df4.mp4
 
-<img src="doc/forecast.jpg" alt="forecast" title="forecast" width="200" height="266"> <img src="doc/himawari.jpg" alt="himawari" title="himawari" width="200" height="266">
+|天気予報|気象衛星ひまわり画像|
+|---|---|
+|<img src="doc/forecast.jpg" alt="forecast" title="forecast" width="200" height="266">| <img src="doc/himawari.jpg" alt="himawari" title="himawari" width="200" height="266">|
+
 
 * WxBeacon2 から情報を取得し、ティッカーに表示、ポン子ちゃんアバターがアナウンスします。
 * 気象庁の天気予報 JSON データを取得し、全国の天気を表示、ポン子ちゃんアバターがアナウンスします。
-* **(Core2 のみ)** 気象庁の気象衛星ひまわりの画像を取得し表示します。
+* **(Core2 のみ)** 気象衛星ひまわりの画像を取得し表示します。
 
 ## 概要
 [株式会社ウェザーニューズ](https://ja.wikipedia.org/wiki/%E3%82%A6%E3%82%A7%E3%82%B6%E3%83%BC%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%BA)(以下 WNI )による 24 時間お天気番組[ウェザーニュースLiVE](https://weathernews.jp/web910/) とリンクしたアプリケーション [ウェザーニュース](https://weathernews.jp/app/) では サンクスポイント 2000 pt以上取得すると[ウェザービーコン2](https://weathernews.jp/smart/wxbeacon2/)(以下 WxBeacon2 ) をゲットできます。(別途[有償購入](https://weathernews.jp/sorashop/)も可能)
 
-<img src="https://weathernews.jp/smart/wxbeacon2/images/mainV.jpg" alt="WxBeacon2" title="WxBeacon2" width="188" height="98">  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/WEATHEROID_TypeA_Airi.jpg/419px-WEATHEROID_TypeA_Airi.jpg" alt="ponko" title="ponko" width="105" height="212">
+|WxBeacon2|WEATHEROID TypeA Airi ちゃん|
+|---|---|
+|<img src="https://weathernews.jp/smart/wxbeacon2/images/mainV.jpg" alt="WxBeacon2" title="WxBeacon2" width="188" height="98">|  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/WEATHEROID_TypeA_Airi.jpg/419px-WEATHEROID_TypeA_Airi.jpg" alt="ponko" title="ponko" width="105" height="212">|
 
 
 M5Stack Basic, Gray, Core2 にて WxBeacon2 や気象庁からデータを取得し、
@@ -24,17 +29,17 @@ M5Stack Basic, Gray, Core2 にて WxBeacon2 や気象庁からデータを取得
 * M5Stack  
 M5Stack Basic, Gray, Core2 のいずれか。
 
-* WxBeacon2  
-実体は [OMRON 2JCIE-BL01](https://components.omron.com/jp-ja/products/sensors/2JCIE-BL) です。
-WxBeacon2 でなく当該製品でも動作すると思われます(手元に無いので未確認)。
-
 * Wi-Fi接続可能な機器  
 ルータやモバイル Wi-Fi 等。
+
+* (持っていれば) WxBeacon2  
+実体は [OMRON 2JCIE-BL01](https://components.omron.com/jp-ja/products/sensors/2JCIE-BL) です。
+WxBeacon2 でなく当該製品でも動作すると思われます(手元に無いので未確認)。
 
 ## コンパイル
 
 ### 依存ライブラリ
-* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.2#develop or later <-- リリース後書き換え
+* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.3 or later
 * [M5GFX](https://github.com/m5stack/M5GFX) 0.1.2 or later
 * [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0 or later
 * [gob_json](https://github.com/GOB52/gob_json.git) 0.0.3 or later
@@ -42,14 +47,14 @@ WxBeacon2 でなく当該製品でも動作すると思われます(手元に無
 * [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) 2.21 or later  
 AquesTalk ESP32 は [こちら](https://www.a-quest.com/download.html) よりダウンロード後、プロジェクトの lib フォルダ(無ければ作成)に展開してください。
 
-
 ### 画像リソース
 初期状態ではダミーとして私が作った顔とロゴが使用されます。
 <img src="doc/dummy.jpg" alt="dummy" title="dummy" width="189" height="252">
 
 **権利上の問題でポン子ちゃんの画像などは当リポジトリには含まれません。**  
 ポン子ちゃんや他の画像を使いたい場合、自分で以下の条件を満たす画像を作成し、ソースファイルとして共にコンパイルする必要があります。  
-
+ダミーリソースは全て weak symbol として定義されているので、ダミーリソースのソースファイルは削除する必要はありません。
+自作した同名シンボルが存在すればそちらが使用されます。
 
 #### 画像フォーマット
 Basic,Gray での動作の都合上、メモリ使用料削減の為に 4bpp,1bpp を扱います。
@@ -158,23 +163,26 @@ WxBeacon2 は通常(出荷時状態)、計測データを内部に蓄積しま�
 
 ## 操作方法
 
-|ボタン| 長押し(1.5秒以上) | 短押し離し |
+|ボタン| 長押し(1.5秒以上) | クリック |
 |---|---|---|
-|A | 全国の天気を取得して喋る | WxBeacon2のデータを取得して喋る|
-|B | (\*2)WxBeacon2 を出荷時の状態へ戻す | |
-|C | (\*1)WxBeacon2 をブロードキャストモードに変更する | ティッカー表示の ON/OFF |
+|A | 全国の天気を取得して喋る [Wi-Fi 通信] | WxBeacon2のデータを取得して喋る[BLE 通信]|
+|B | (\*2)WxBeacon2 を出荷時の状態へ戻す [BLE 通信] | |
+|C | (\*1)WxBeacon2 をブロードキャストモードに変更する [BLE 通信] | ティッカー表示の ON/OFF |
 
-各通信は排他的に動作するので、通信が動作中はボタンを押しても動作しません。  
+各通信は排他的に動作するので、通信動作させるボタンは通信中は動作しません。  
 通信中は画面左下に Wi-Fi か BT マークが点滅表示されています。  
 <img src="doc/progress.jpg" alt="progress" title="progress" width="200" height="266">
 
 C 長押しでブロードキャストモードに上手くならなかった場合は、 B 長押しで出荷時に戻して再度試してください。
 
-## WxBeacon2 と M5Stack との NumBLE によるやり取り
+## Zenn の記事
+- WxBeacon2 と M5Stack との NumBLE によるやり取り  
 こちらで[記事](https://zenn.dev/gob/articles/wxbeacon2_000_bbc2e4106f701c)にしました。
+- 気象庁天気予報 JSON と ひまわり画像に関して  
+こちらで[記事](https://zenn.dev/gob/articles/wxbeacon2_001_961ea4d226fc24)にしました。
+
 
 ## 謝辞
-
 * 各ライブラリの作成者関係者の方々、助言や示唆を頂いた方々には毎度大変お世話になっております。  
 * 気象庁 JSON 、気象衛星ひまわり画像取得に関しての先人の皆様方の情報を参考にしました。  
 * 毎日楽しい番組を送ってくださる WNI のスタッフ、[気象予報士、キャスター](https://weathernews.jp/wnl/caster/index.html)他の皆様、作業中ラジオ的に楽しんでおります。  
