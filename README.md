@@ -39,8 +39,7 @@ WxBeacon2 でなく当該製品でも動作すると思われます(手元に無
 ## コンパイル
 
 ### 依存ライブラリ
-* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.3 or later
-* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.2 or later
+* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.3 or later (depends on [M5GFX](https://github.com/m5stack/M5GFX) 0.1.3 or later)
 * [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0 or later
 * [gob_json](https://github.com/GOB52/gob_json.git) 0.0.3 or later
 * [gob_datetime](https://github.com/GOB52/gob_datetime.git) 0.1.1 or later
