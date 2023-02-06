@@ -9,12 +9,12 @@
 
 namespace
 {
-template<class> struct is_stdarray :std::false_type {};
-template<class T, std::size_t N>  struct is_stdarray<std::array<T, N>> : std::true_type {};
+template<class> struct is_std_array :std::false_type {};
+template<class T, std::size_t N>  struct is_std_array<std::array<T, N>> : std::true_type {};
 
 template<class T> bool string2array(T& a, const std::string& v)
 {
-    static_assert(is_stdarray<T>::value, "T must be std::array");
+    static_assert(is_std_array<T>::value, "T must be std::array");
 
     a = {};
     if(a.empty() || v.empty() || v.length() == 0) { return false; }
@@ -26,9 +26,7 @@ template<class T> bool string2array(T& a, const std::string& v)
 bool toLocalTime(std::tm& t, time_t tt)
 {
     t = std::tm{};
-    std::tm* lt = std::localtime(&tt);
-    if(lt) { t = *lt; }
-    return lt;
+    return localtime_r(&tt, &t) != nullptr;
 }
 
 //

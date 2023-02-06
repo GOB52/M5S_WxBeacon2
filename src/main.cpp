@@ -8,35 +8,178 @@
 */
 #include <M5Unified.h>
 #include <M5GFX.h>
-
-#include <esp_log.h>
+#include <utility/M5Timer.h>
 #include <esp_system.h>
+#include <esp_bt.h> // esp_bt_controller_mem_release
+#include <esp_random.h> // esp_random() is hardware RNG. (No random seed initialization is required)
 #include <WiFi.h>
-#include <NimBLEDevice.h>
-#include <NimBLEScan.h>
 
-#include "wxbeacon2_ble.hpp"
-#include "wxbeacon2_log.hpp"
+#include "utility.hpp"
 #include "aq_talk.hpp"
 #include "ponko_avatar.hpp"
 #include "wni_ticker.hpp"
+#include "weather_map.hpp"
+#include "progress.hpp"
+#include "wb2/wxbeacon2_task.hpp"
+#include "wb2/wxbeacon2_log.hpp"
+#include "jma/jma_task.hpp"
+#include <gob_datetime.hpp>
+#include "cpu_usage.hpp"
+
+#include <gob_datetime_version.hpp>
+#include <gob_json_version.hpp>
+
+#ifdef ARDUINO_M5STACK_Core2
+#include "himawari/himawari.hpp"
+#include "himawari/himawari_task.hpp"
+#include "himawari/himawari_screen.hpp"
+#endif
 
 #include <ctime>
 #include <cstdio>
+#include <algorithm>
+#include <string>
+#include <map>
 
-// Settings
+#if __has_include (<esp_idf_version.h>)
+#include <esp_idf_version.h>
+#else // esp_idf_version.h has been introduced in Arduino 1.0.5 (ESP-IDF3.3)
+#define ESP_IDF_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
+#define ESP_IDF_VERSION ESP_IDF_VERSION_VAL(3,2,0)
+#endif
+
+using goblib::datetime::LocalTime;
+using goblib::datetime::LocalDateTime;
+using goblib::datetime::OffsetDateTime;
+
 namespace
 {
-// Auto talking interval time (Unit:second)
-constexpr uint16_t TALKING_INTERVAL_SEC = 60 * 3;
-// Measurement interval time (Unit:second) for broadcast mode
-constexpr uint16_t MEASUREMENT_INTERVAL_BROADCAST_SEC = 60 * 3;
-// turnon LED when got advertise data.
-constexpr bool TURNON_LED = false;
-}
+// Automatic request interval.
+#ifdef M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC
+# define AUTO_REQUEST_INTERVAL_SEC (M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC)
+#else
+# define AUTO_REQUEST_INTERVAL_SEC (5 * 60)
+#endif
 
-namespace
+// Automatic talk interval
+#ifdef M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC
+# define AUTO_TALK_INTERVAL_SEC (M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC)
+#else
+# define AUTO_TALK_INTERVAL_SEC (1 * 60)
+#endif
+
+// NTP serve URL
+PROGMEM const char ntp0[] = "ntp.nict.jp";
+PROGMEM const char ntp1[] = "ntp.jst.mfeed.ad.jp";
+PROGMEM const char ntp2[] = "time.cloudflare.com";
+const char* ntpURLTable[] = { ntp0, ntp1, ntp2 }; // DON'T USE PROGMEM! (because it will be shuffled later)
+
+// For configurate time
+#ifndef M5S_WXBEACON2_TIMEZONE_LOCATION
+#define M5S_WXBEACON2_TIMEZONE_LOCATION "Asia/Tokyo"
+#endif
+
+Avatar* avatar;
+Ticker* ticker;
+WeatherMap* weatherMap;
+#ifdef ARDUINO_M5STACK_Core2
+HimawariScreen* himawariScreen;
+#endif
+ProgressIcon* progress;
+bool forceRender = true; // Force rendering all
+
+// For task settings. (piority low:0) [Beware of WDT]
+constexpr UBaseType_t advertisePriority = 1;
+constexpr BaseType_t advertiseCore = 0; // NimBLE task must be core 0. see also https://gitter.im/NimBLE-Arduino/community?source=orgpage
+
+constexpr UBaseType_t forecastPriority = 1;
+constexpr BaseType_t forecastCore = 0;
+
+constexpr UBaseType_t himawariPriority = 1;
+constexpr BaseType_t himawariCore = 0;
+
+constexpr UBaseType_t aqtalkPriority = 1;
+constexpr BaseType_t aqtalkCore = 1;
+
+constexpr UBaseType_t speakerPriority = 1;
+constexpr BaseType_t speakerCore = 0;
+
+// 
+bool existsBeacon = false;
+WxBeacon2::AdvertiseData advertiseData;
+bool updatedAdvertise = false;
+M5Timer timer;
+int_fast8_t requestTimerId{-1}, talkTimerId{-1};
+
+//
+struct Weather
 {
+    jma::officecode_t oc;
+    jma::weathercode_t wc;
+    int8_t lowTemp, highTemp;
+
+    String toString() const
+    {
+        char buf[128];
+        // low == temp means Iinvalid data.(The lowest highest temperature on the day of the announcement is invalid)
+        if(lowTemp != highTemp)
+        {
+            snprintf(buf, sizeof(buf), "[%s] %s %d℃/%d℃",
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc),
+                     highTemp, lowTemp);
+        }
+        else
+        {
+            snprintf(buf, sizeof(buf), "[%s] %s",
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc));
+        }
+        buf[sizeof(buf)-1] = '\0';
+        return String(buf);
+    }
+    String toColorString() const
+    {
+        char buf[128];
+        // low == temp means Iinvalid data.(The lowest highest temperature on the day of the announcement is invalid)
+        if(lowTemp != highTemp)
+        {
+            snprintf(buf, sizeof(buf), "#@1[%s] %s #@2%d℃#@3%d℃",// @"#n" Palette NO of text for ticker.
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc),
+                     highTemp, lowTemp);
+        }
+        else
+        {
+            snprintf(buf, sizeof(buf), "#@1[%s] %s",
+                     jma::officesCodeToString(oc),
+                     jma::weatherCodeToString(wc));
+        }
+        buf[sizeof(buf)-1] = '\0';
+        return String(buf);
+    }
+};
+std::map<OffsetDateTime, std::vector<Weather> > forecast;
+OffsetDateTime requestForecastDatetime;
+bool updatedForecast = false;
+
+//
+#ifdef ARDUINO_M5STACK_Core2
+const uint8_t* himawariImage = nullptr;
+himawari::Band himawariBand;
+OffsetDateTime himawariDatetime;
+bool updatedHimawari = false;
+#endif
+
+// Ticker text
+PROGMEM const char DEFAULT_TICKER_TITLE[] = "Ponko";
+PROGMEM const char DEFAULT_TICKER_TEXT[] = "WEATHEROID Type A Airi    ";
+PROGMEM const char NOTICE_TICKER_TEXT[] = "Press and hold C to put the WxBeacon2 into the broadcast mode.    ";
+PROGMEM const char NOT_EXISTS_BEACON_TICKER_TEXT[] = "WxBeacon2 IS NOT EXISTS.    ";
+PROGMEM const char REQUEST_TICKER_TITLE[] = "Request...";
+PROGMEM const char REQUEST_ADV_TICKER_TEXT[] = "Waiting receive Advertise.    ";
+PROGMEM const char REQUEST_FORECAST_TICKER_TEXT[] = "Waiting receive forecast.    ";
+
 // Get std::string that formatted with args.
 #if 0
 template<typename ...Args> std::string formatString(const char* fmt, Args... args)
@@ -44,7 +187,7 @@ template<typename ...Args> std::string formatString(const char* fmt, Args... arg
     size_t sz = snprintf(nullptr, 0U, fmt, args...); // calculate length
     char buf[sz + 1];
     snprintf(buf, sizeof(buf), fmt, args...);
-    return std::string(buf, buf + sz + 1);
+    return std::string(buf, buf + sz);
 }
 #else
 std::string formatString(const char* fmt, ...)
@@ -56,219 +199,106 @@ std::string formatString(const char* fmt, ...)
     char buf[sz + 1];
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-    return std::string(buf, buf + sz + 1);
+    return std::string(buf, buf + sz);
 }
 #endif
 
-// NTP serve URL
-const char* ntpURL[] =
+struct ESP32RNG
 {
-    "ntp.nict.jp",
-    "ntp.jst.mfeed.ad.jp",
-    "time.cloudflare.com",
+    using result_type = uint32_t;
+    static result_type min() { return 0; }
+    static result_type max() { return gob::size(ntpURLTable); }
+    result_type  operator()() { return esp_random() % max(); }
 };
 
-// For configurate time
-#ifdef M5S_WXBEACON2_GMT_OFFSET_HOUR
-long gmtOffsetSec = 3600 * M5S_WXBEACON2_GMT_OFFSET_HOUR;
-#else
-long gmtOffsetSec = 3600 * 9; // JST(GMT+9) as default.
-#endif
-
-#ifdef M5S_WXBEACON2_DAYLIGHT_OFFSET_SEC
-long daylightOffsetSec = M5S_WXBEACON2_DAYLIGHT_OFFSET_SEC;
-#else
-long daylightOffsetSec = 0; // 0 as default
-#endif
-
-#ifdef M5S_WXBEACON2_WIFI_HOST_NAME
-#define G_STRINGFY_(s) #s
-#define G_STRINGFY(s) G_STRINGFY_(s)
-const char* WIFI_HOST_NAME = G_STRINGFY(M5S_WXBEACON2_WIFI_HOST_NAME);
-#else
-const char* WIFI_HOST_NAME = nullptr;
-#endif
-
-// Client
-WxBeacon2Client* wb2Client = nullptr;
-NimBLEAddress wb2address; // detected wxbeacon2 address
-
-/*
-  WxBeacon2Client with scoped
-  Call disconnect on destruct.
-*/
-struct ScopedWB2Client
+// Configurate Time by NTP.
+void configTime()
 {
-    ScopedWB2Client(WxBeacon2Client& client) : _client(client) {}
-    ~ScopedWB2Client() { _client.disconnect(); }
-    WxBeacon2Client& client() { return _client; }
-  private:    
-    WxBeacon2Client& _client;
-};
-
-/* 
-  Change broadcast mode
-  @warning  Changing to broadcast mode will not work with the WNI application.
-  @warning If you want to link with the WNI application, call the changeDefaultSetting function.
-  @warning If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
- */
-bool changeBeaconMode()
-{
-    if(!wb2Client) { WB2_LOGE("Client null"); return false; }
-    if((uint64_t)wb2address == 0) { WB2_LOGE("Address not yet obtained"); return false; }
-
-    ScopedWB2Client wb2(*wb2Client);
-
-    WB2_LOGI("connect to : %s", wb2address.toString().c_str());
-    if(!wb2.client().isConnected() && !wb2.client().connect(wb2address))
+    // WiFi connect
+    WiFi.begin(); // Connect to credential in Hardware. (ESP32 saves the last WiFi connection)
+    int tcount = 20;
+    while(tcount-- > 0 && WiFi.status() != WL_CONNECTED)
     {
-        WB2_LOGE("Failed to connect");
-        return false;
-    }
-
-    WxBeacon2::ADVSetting setting;
-    if(!wb2.client().getADVSetting(setting))
-    {
-        WB2_LOGE("Failed ti get setting");
-        return false;
-    }
-
-    setting._beaconMode = (uint8_t)WxBeacon2::BeaconMode::GeneralBroadcaster2;
-
-    if(wb2.client().setADVSetting(setting))
-    {
-        return wb2.client().setMeasurementInterval(MEASUREMENT_INTERVAL_BROADCAST_SEC);
-    }
-    return false;
-}
-
-/*
-  Change default mode (for WNI Application)
-  @warning If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
- */
-bool changeDefaultSetting()
-{
-    if(!wb2Client) { WB2_LOGE("Client null"); return false; }
-    if((uint64_t)wb2address == 0) { WB2_LOGE("Address not yet obtained"); return false; }
-
-    ScopedWB2Client wb2(*wb2Client);
-
-    WB2_LOGI("connect to : %s", wb2address.toString().c_str());
-    if(!wb2.client().isConnected() && !wb2.client().connect(wb2address))
-    {
-        WB2_LOGE("Failed to connect");
-        return false;
-    }
-
-    // Need set interval and time inforamtion,
-    if(wb2.client().setADVSetting(WxBeacon2::ADVSetting::DEFAULT_SETTING))
-    {
+        M5.Display.printf(".");
         delay(500);
-        std::tm t;
-        getLocalTime(&t);
-        if(wb2.client().setTimeInformation(t))
-        {
-            delay(500);
-            return wb2.client().setMeasurementInterval(WxBeacon2::MeasurementInterval::DEFAULT_VALUE);
-        }
     }
-    return false;
-}
-
-/* turnon LED 1 second */
-bool turnOnLED()
-{
-    if(!wb2Client) { WB2_LOGE("Client null"); return false; }
-    if((uint64_t)wb2address == 0) { WB2_LOGE("Address not yet obtained"); return false; }
-
-    ScopedWB2Client wb2(*wb2Client);
-
-    WB2_LOGI("connect to : %s", wb2address.toString().c_str());
-    if(!wb2.client().isConnected() && !wb2.client().connect(wb2address))
+    if(WiFi.status() != WL_CONNECTED)
     {
-        WB2_LOGE("Failed to connect");
-        return false;
+        WB2_LOGE("Failed to connect WiFi");
+        abort();
     }
-    return wb2.client().setLED(1);
+
+    std::shuffle(std::begin(ntpURLTable), std::end(ntpURLTable), ESP32RNG());
+    auto ptz = goblib::datetime::locationToPOSIX(M5S_WXBEACON2_TIMEZONE_LOCATION);
+    WB2_LOGI("tz:[%s] [%s] [%s] [%s]", ptz ? ptz : "NONE", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
+
+    configTzTime(ptz ? ptz : "", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
+    // waiting for time synchronization
+    {
+        std::tm discard{};
+        getLocalTime(&discard, 10 * 1000);
+    }
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
 }
 
 //
-TaskHandle_t advertiseTask;
-WxBeacon2::AdvertiseData advertiseData;
-volatile bool updatedAdvertise = false;
-volatile bool advertiseBusy = false;
-time_t lastUpdate = -1;
-
-// Task of get advertise data from WxBeacon2.
-void wb2_advertise_task(void*)
+bool canRequest()
 {
-    NimBLEScan* scan = NimBLEDevice::getScan();
-    WxBeacon2AdvertiseCallbacks cb;
-    scan->setAdvertisedDeviceCallbacks(&cb);
-    scan->setInterval(1000);
-    scan->setWindow(900);
-    scan->setActiveScan(true);
+#ifdef ARDUINO_M5STACK_Core2
+    return !himawari::busy() && !updatedHimawari &&
+#else
+    return 
+#endif
+            !busyAdvertise() && !updatedAdvertise &&
+            !jma::busyForecast() && !updatedForecast;
+}
 
-    for(;;)
+// --------------------------------
+// Request advertise
+void _requestAdvertise()
+{
+    if(canRequest())
     {
-        ulTaskNotifyTake( pdTRUE, portMAX_DELAY );
-
-        cb.clear();
-
-        WB2_LOGI("Start scanning");
-        scan->start(60, false);
-        while(scan->isScanning()) { delay(100); }
-        WB2_LOGI("End of scanning. detected :%d", cb.detected());
-
-        if(cb.detected())
-        {
-            wb2address = cb.address();
-            advertiseData = cb.data();
-            lastUpdate = time(nullptr);
-            if(TURNON_LED) { turnOnLED(); }
-        }
-        updatedAdvertise = cb.detected();
-        advertiseBusy = false;
-        scan->clearResults();
+        requestAdvertise();
+        ticker->setTitle(REQUEST_TICKER_TITLE);
+    }
+    else
+    {
+        WB2_LOGI("Busy");
     }
 }
 
-// Kick adverstise_task
-void getAdvertiseAsync()
+// Callback on get advertise.
+void callbackOnAdvertise(const bool exists, const WxBeacon2::AdvertiseData& ad)
 {
-    if(!advertiseBusy)
-    {
-        advertiseBusy = true;
-        updatedAdvertise = false;
-        xTaskNotifyGive(advertiseTask);
-    }
+    existsBeacon = exists;
+    updatedAdvertise = true;
+    advertiseData = ad;
 }
 
-// Getting comms?
-bool busyAdvertise() { return advertiseBusy; }
-
-//
-Avatar* avatar;
-Ticker* ticker;
-bool forceFace = true; // Force rendering of the face.
-
-// play voice
+// Play advertise
 void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
 {
-    if(data.format() != WxBeacon2::ADVFormat::E)
-    {
-        WB2_LOGE("Illegal format");
-        return;
-    }
+    forceRender = true;
+    avatar->closeup();
+    weatherMap->hide();
+#ifdef ARDUINO_M5STACK_Core2
+    himawariScreen->hide();
+#endif    
+    ticker->setTitle("WxBeacon2");
+    aq_talk::stopAquesTalk();
+
     auto de = data.getE();
-    if(!de)
+    if(!existsBeacon || data.format() != WxBeacon2::ADVFormat::E || !de)
     {
-        WB2_LOGE("Failed to get E");
+        ticker->setText(existsBeacon ? NOTICE_TICKER_TEXT : NOT_EXISTS_BEACON_TICKER_TEXT);
+        ticker->setColor(Ticker::Color::Purple);
         return;
     }
 
-    auto s = formatString("kion <NUMK VAL=%3.1f>do."
-                          "situdo <NUMK VAL=%3.1f>pa-sento."
+    auto vs = formatString("kion <NUMK VAL=%3.1f>do."
+                           "situdo <NUMK VAL=%3.1f>pa-sento."
                           "akarusa <NUMK VAL=%d>rukkusu."
                           "yu-bui <NUMK VAL=%3.1f>."
                           "kiatu <NUMK VAL=%4.1f>hekutopasukaru."
@@ -276,7 +306,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
                           "fukaisisu- <NUMK VAL=%3.1f>."
                           "neccyu-syoukikendo <NUMK VAL=%3.1f>"
                           "desu."
-                          ,
+                           ,
                           (float)de->temperature(),
                           (float)de->relativeHumidity(),
                           (int)de->ambientLight(),
@@ -286,11 +316,10 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
                           (float)de->discomfortIndex(),
                           (float)de->heatstroke()
                           );
+    aq_talk::playAquesTalk(vs.c_str(), 120);
 
-    WB2_LOGV("PLAY:[%s]", s.c_str());
-    aq_talk::playAquesTalk(s.c_str(), 110);
-
-    auto ts = formatString("TEMP %3.1fdegC HUM %3.1f%% AL %dlx UV %3.1f PRESURE %4.1fhPa N %3.1fdB DCMFT %3.1f WBGT %3.1f   ",
+    //    auto ts = formatString("TEMP %3.1fdegC HUM %3.1f%% AL %dlx UV %3.1f PRESURE %4.1fhPa N %3.1fdB DCMFT %3.1f WBGT %3.1f   ",
+    auto ts = formatString("#@1気温:#@2%3.1f#@1℃ 湿度#@2:%3.1f#@1%% 明度:#@2%d#@1lx UV指数:#@2%3.1f #@1気圧:#@2%4.1f#@1hPa 騒音:#@2%3.1f#@1dB 不快指数:#@2%3.1f #@1WBGT:#@2%3.1f        ",
                            (float)de->temperature(),
                            (float)de->relativeHumidity(),
                            (int)de->ambientLight(),
@@ -300,113 +329,307 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
                            (float)de->discomfortIndex(),
                            (float)de->heatstroke()
                            );
-    WB2_LOGV("TICKER:[%s]", s.c_str());
+    ticker->setLevelWBGT(de->heatstroke()); // Set telop color.
     ticker->setText(ts.c_str());
 }
 
-constexpr char DEFAULT_TICKER_TEXT[] = "WEATHEROID Type A Airi";
-constexpr char NOTICE_TICKER_TEXT[] = "Press and hold C to put the WxBeacon2 into the broadcast mode.  ";
-
-#if 0
-bool test_connect()
+// --------------------------------
+// Request forecast
+void _requestForecast()
 {
-    if(!wb2Client) { WB2_LOGE("Client null"); return false; }
-    if((uint64_t)wb2address == 0) { WB2_LOGE("Address not yet obtained"); return false; }
-
-    ScopedWB2Client wb2(*wb2Client);
-
-    WB2_LOGI("connect to : %s", wb2address.toString().c_str());
-    if(!wb2.client().isConnected() && !wb2.client().connect(wb2address))
+    if(canRequest())
     {
-        WB2_LOGE("Failed to connect");
-        return false;
+#if 0
+        // TEST
+        forecast.clear();
+        OffsetDateTime odt = OffsetDateTime::now();
+        requestForecastDatetime = odt;
+        const jma::officecode_t requestTable[] =
+                {
+                    16000, // Sapporo
+                    40000, // Sendai
+                    130000, // Tokyo
+                    150000, // Niigata
+                    170000, // Kanazawa
+                    230000, // Nagoya
+                    270000, // Oosaka
+                    340000, // Hiroshima
+                    390000, // Kochi
+                    400000, // Fukuoka
+                    471000, // Okinawa
+                };
+
+        auto& wv = forecast[odt];
+        jma::weathercode_t wc = 200;
+        for(auto& e : requestTable)
+        {
+            wv.push_back({e, wc++, -12, 38});
+        }
+        updatedForecast = true;
+        return;
+#endif
+
+        forecast.clear();
+        auto odt = OffsetDateTime::now();
+        if(odt.toLocalTime() > LocalTime(17, 0, 0))
+        {
+            auto ldt = odt.toLocalDateTime();
+            auto epoch = ldt.toEpochSecond(odt.offset()) + 86400; // next day
+            ldt = LocalDateTime::ofEpochSecond(epoch, odt.offset());
+            odt = OffsetDateTime::of(ldt, odt.offset());
+        }
+        requestForecastDatetime = odt;
+        WB2_LOGI("request forecast:%s", odt.toString().c_str());
+
+        jma::requestForecast();
+        progress->initRatio();
+        progress->showProgress();
+        
+        ticker->setTitle(REQUEST_TICKER_TITLE);
     }
-
-    std::string str;
-    auto b = wb2.client().getDeviceName(str);
-    printf("%d DeviceName:%s\n", b, str.c_str());
-
-    WxBeacon2::GenericAccesssService::Appearance app;
-    b = wb2.client().getAppearance(app);
-    printf("%d Appearnce:%x\n", b, app._category);
-
-    WxBeacon2::GenericAccesssService::PeripheralPreferredConnectionParameters params;
-    b = wb2.client().getPeripheralPreferredConnectionParameters(params);
-    printf("%d params:%x/%x/%x/%x\n", b,
-           params._intervalMin, params._intervalMax, params._slaveLatency, params._timeout);
-
-    b = wb2.client().getModelNumber(str);
-    printf("%d ModelNumber:[%s]\n", b, str.c_str());
-    b = wb2.client().getSerialNumber(str);
-    printf("%d SerialNumber:[%s]\n", b, str.c_str());
-    b = wb2.client().getFirmwareRevision(str);
-    printf("%d FirmRev:[%s]\n", b, str.c_str());
-    b = wb2.client().getHardwareRevision(str);
-    printf("%d HardRev:[%s]\n", b, str.c_str());
-    b = wb2.client().getManufacturerName(str);
-    printf("%d ManufacturerName:[%s]\n", b, str.c_str());
-    
-    return true;
+    else
+    {
+        WB2_LOGI("Busy");
+    }
 }
 
-bool test_getLatestPageData()
+// Callback on progess
+void callbackOnProgressForecast(const size_t readed, const size_t size)
 {
-    if(advertiseData.format() == WxBeacon2::ADVFormat::E) { WB2_LOGE("Not recording mode"); return false; }
-    
-    if(!wb2Client) { WB2_LOGE("Client null"); return false; }
-    if((uint64_t)wb2address == 0) { WB2_LOGE("Address not yet obtained"); return false; }
+    float ratio = (float)readed / size;
+    progress->setRatio(ratio);
+}
 
-    ScopedWB2Client wb2(*wb2Client);
-
-    WB2_LOGI("connect to : %s", wb2address.toString().c_str());
-    if(!wb2.client().isConnected() && !wb2.client().connect(wb2address))
+// Callback on get forecast.
+void callbackOnForecast(const jma::officecode_t oc, const jma::Forecast& fc, const jma::WeeklyForecast& wfc)
+{
+    if(oc == 0)
     {
-        WB2_LOGE("Failed to connect");
-        return false;
+        progress->hideProgress();
+        updatedForecast = true;
+        return;
     }
 
-    WxBeacon2::LatestPage lpage;
-    if(!wb2.client().getLatestPage(lpage)) { WB2_LOGE("Failed to get latest page"); return false; }
-    printf("Latest: %d,%d\n", lpage._page, lpage._row);
-
-    int retryCount = 3;
-    WxBeacon2::ResponseFlag flag = { 2 };
-    do
+    if(fc.existsTopWeatherCodes() && fc.existsTopTemp())
     {
-        if(!wb2.client().requestPage(lpage._page, lpage._row)) { continue; } // request
-        for(;;) // get response flag
+        auto& wcodes = fc.TopWeatherCodes();
+        auto& timedef = fc.TopWeatherTime();
+        auto& temps = fc.TopTemp();
+        auto& timedefTemps = fc.TopTempTime();
+        assert(wcodes.size() == timedef.size());
+        assert(temps.size() == timedefTemps.size());
+        
+        WB2_LOGV("wcodes:%zu temps:%zu", wcodes.size(), temps.size());
+        
+        for(uint8_t i = 0; i < wcodes.size(); ++i)
         {
-            wb2.client().getResponseFlag(flag);
-            if((int)flag._updateFlag != 0) { break; }
-            delay(10);
-        }
-    }while((int)flag._updateFlag == 2 && retryCount--);
-    if((int)flag._updateFlag != 1) { WB2_LOGE("Failed to request or get response"); return false; }
+            Weather weather { oc, wcodes[i], 0, 0 };
 
-    int cnt = lpage._row + 1;
-    while(cnt--)
-    {
-        WxBeacon2::ResponseData data;
-        if(!wb2.client().getResponseData(data)) { WB2_LOGE("Failed to get response data"); return false; }
-        time_t t = flag._time32 + lpage._interval * data._data._row;
-        auto lt = std::localtime(&t);
-        printf("DATA: row:%02d time:%4d/%02d/%02d %02d:%02d:%02d\n",
-               data._data._row,
-               lt->tm_year + 1900,
-               lt->tm_mon + 1,
-               lt->tm_mday,
-               lt->tm_hour,
-               lt->tm_min,
-               lt->tm_sec);
+            auto odt = timedef[i];
+            auto& v = forecast[odt]; // create if empty.
+
+            auto it = std::find_if(timedefTemps.begin(), timedefTemps.end(),
+                                   [&odt](const OffsetDateTime& odtTemps)
+                                   {
+                                       return odt.toLocalDate() == odtTemps.toLocalDate();
+                                   });
+            auto idx = std::distance(timedefTemps.begin(), it);
+            // Store low/high temps if exists.
+            if(idx < timedefTemps.size())
+            {
+                weather.lowTemp = temps[idx];
+                weather.highTemp = temps[idx+1];
+            }
+            v.push_back(weather);
+            WB2_LOGV("%s:%u:%u %d/%d", odt.toString().c_str(), weather.oc, weather.wc, weather.lowTemp, weather.highTemp);
+        }
     }
-    return true;
+    else
+    {
+        WB2_LOGD("Failed %d/%d",fc.existsTopWeatherCodes(),fc.existsTopTemp());
+    }
+}
+
+// Play forecast
+void playForecast()
+{
+    forceRender = true;
+#ifdef ARDUINO_M5STACK_Core2
+    himawariScreen->hide();
+#endif
+    avatar->wipe(72, 32, 0.30f);
+    weatherMap->setDatetime(requestForecastDatetime);
+    
+    if(forecast.empty())
+    {
+        avatar->closeup();
+        weatherMap->hide();
+        ticker->setTitle("ERROR");
+        ticker->setColor(Ticker::Color::Purple);
+        ticker->setText(DEFAULT_TICKER_TEXT);
+        return;
+    }
+
+    String ts;
+    ts.reserve(256);
+    auto vs = formatString("<NUMK VAL=%d COUNTER=gatu><NUMK VAL=%d COUNTER=nichi>no/tenki'o/osirase'simasu  ",
+                           requestForecastDatetime.month(), requestForecastDatetime.day());
+
+    weatherMap->clearIcon();
+    for(auto& e : forecast) // each date-time
+    {
+        WB2_LOGV("%s:[%s] %zu", requestForecastDatetime.toString().c_str(), e.first.toString().c_str(), e.second.size());
+
+        if(e.first.toLocalDate() != requestForecastDatetime.toLocalDate()) { continue; } // Skip data.
+
+        auto wv = e.second;
+        std::sort(wv.begin(), wv.end(), [](const Weather& a, const Weather& b) { return a.oc < b.oc; }); // Ascend officecode_t
+        for(auto& w : wv)
+        {
+            ts += w.toColorString() + ' ';
+            vs += formatString("%s %s  #", aq_talk::officeCodeToTalk(w.oc), aq_talk::weatherCodeToTalk(w.wc));
+
+            weatherMap->addIcon(w.oc, w.wc);
+        }
+        ts += "        ";
+    }
+    aq_talk::playAquesTalk(vs.c_str(), 120);
+
+    ticker->setTitle("Weather");
+    ticker->setText(ts.c_str());
+    ticker->setColor(Ticker::Color::Green);
+    weatherMap->show();
+}
+
+// --------------------------------
+#ifdef ARDUINO_M5STACK_Core2
+// Request himawari image
+void _requestHimawari()
+{
+    if(canRequest())
+    {
+#if 0
+        himawari::request(OffsetDateTime::now(),
+                          (himawari::Area)(esp_random() % gob::to_underlying(himawari::Area::Max)),
+                          (himawari::Band)(esp_random() % gob::to_underlying(himawari::Band::Max))
+                          );
+#else
+        himawari::request(OffsetDateTime::now(),
+                          himawari::Area::Japan,
+                          (himawari::Band)(esp_random() % gob::to_underlying(himawari::Band::Max))
+                          );
+#endif
+        progress->initRatio();
+        progress->showProgress();
+        progress->setRatio(0.0f);
+        ticker->setTitle(REQUEST_TICKER_TITLE);
+    }
+    else
+    {
+        WB2_LOGD("busy");
+    }
+}
+
+// Callback on progress
+void callbackOnProgressHimawari(const size_t readed, const size_t size)
+{
+    float ratio = (float)readed / size;
+    progress->setRatio(ratio);
+}
+
+// Callback on get himawwri image.
+void callbackOnHimawariImage(const uint8_t* ptr, const himawari::Band band, const OffsetDateTime& odt)
+{
+    progress->hideProgress();
+    himawariImage = ptr;
+    himawariBand = band;
+    himawariDatetime = odt;
+    updatedHimawari = true;
+}
+
+PROGMEM static const char talkHimawari[] = "kisyou'eisei'himawarino 'gazouo 'gorannkudasai";
+
+// Draw himawari image
+void drawHimawari()
+{
+    forceRender = true;
+    weatherMap->hide();
+    himawariScreen->set(himawariDatetime, himawariImage);
+
+    if(!himawariImage)
+    {
+        himawariScreen->hide();
+        avatar->closeup();
+        ticker->setTitle("ERROR");
+        ticker->setColor(Ticker::Color::Purple);
+        ticker->setText(DEFAULT_TICKER_TEXT);
+        return;
+    }
+    aq_talk::playAquesTalk(talkHimawari, 120);
+    himawariScreen->show();
+    avatar->wipe(204, 152 , 0.25f);
+    ticker->setTitle("Satellite");
+    String ts = himawari::bandToString(himawariBand) + "    ";
+    ticker->setText(ts.c_str());
+    ticker->setColor(Ticker::Color::Green);
 }
 #endif
+
+PROGMEM static const char t0[] = "minnasa--n,ponnbanwa,weza-roido'taipuei,airi'desu";
+PROGMEM static const char t1[] = "konsyu-no/saikaiwa,'kaniza";
+PROGMEM static const char t2[] = "weza-roido'una'na-i wa arimasen";
+const char* talkTable[] = { t0, t1, t2 };
+void talkRandom()
+{
+    if(!aq_talk::busy())
+    {
+        auto idx = esp_random() % gob::size(talkTable);
+        aq_talk::playAquesTalk(talkTable[idx], 110);
+    }
+}
+
+// --------------------------------
+// Callback on End of aqtalk.
+void callbackOnEndAqTalk()
+{
+    timer.restartTimer(talkTimerId);
+    WB2_LOGV("restart talkRandom timer");
+}
+
+// --------------------------------
+// Timer
+void timerCallbackRequest()
+{
+    if(canRequest())
+    {
+#ifdef ARDUINO_M5STACK_Core2
+        _requestHimawari();
+#else
+        _requestAdvertise();
+#endif
+        return;
+    }
+    // Retry
+    requestTimerId = timer.setTimeout(1000 /*ms*/, timerCallbackRequest);
+    WB2_LOGI("Retry timercallback %d", requestTimerId);
+}
+
+void resetRequestTimer()
+{
+    timer.deleteTimer(requestTimerId);
+    requestTimerId = timer.setTimeout(M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC * 1000 /*ms*/, timerCallbackRequest);
+    WB2_LOGV("Reset request timer %d", requestTimerId);
+}
+
 //
 }
 
+// Setup
 void setup()
 {
+    WB2_LOGI("Top of setup free:%u internal:%u", esp_get_free_heap_size(), esp_get_free_internal_heap_size());
+    WB2_LOGI("PSRAM:size:%u free:%u", ESP.getPsramSize(), ESP.getFreePsram());
+    
     // log level
     esp_log_level_set("wifi", (esp_log_level_t)0);
     esp_log_level_set("NimBLE", (esp_log_level_t)0);
@@ -414,228 +637,234 @@ void setup()
     esp_log_level_set("NimBLEDevice", (esp_log_level_t)0);
     esp_log_level_set("NIMBLE_NVS", (esp_log_level_t)0);
 
+    // Incrase internal heap.
+    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+
     //
-    M5.begin();
+    M5.begin();  
     auto bd = M5.getBoard();
-    WB2_LOGV("board : %x", bd); // 2:M5Stack Basic/Gray 3:Core2
-
-    auto scfg = M5.Speaker.config();
-    scfg.task_priority = 2;
-    scfg.task_pinned_core = 0;
-    M5.Speaker.config(scfg);
-    M5.Speaker.begin();
-    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 128 : 64);
-    delay(500);
-
+    WB2_LOGI("M5.board : %x", bd); // 2:M5Stack Basic/Gray 3:Core2
     if (M5.Display.width() < M5.Display.height())
     {
         M5.Display.setRotation(M5.Display.getRotation() ^ 1);
     }
-    M5.Display.setBrightness(30);
+    auto scfg = M5.Speaker.config();
+    scfg.task_priority = speakerPriority;
+    scfg.task_pinned_core = speakerCore;
+    M5.Speaker.config(scfg);
+    M5.Speaker.begin();
+#ifdef NDEBUG
+    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 128 : 64);
+#else
+    M5.Speaker.setVolume(bd == m5::board_t::board_M5Stack ? 80 : 40);
+#endif
+    
+    delay(500);
+    M5.Display.setBrightness(40);
     M5.Display.clear();
 
-    M5.Display.fillScreen(TFT_DARKGREY);
-    M5.Display.setCursor(0,0);
-    M5.Display.printf("Wifi Connect");
-    if(WIFI_HOST_NAME && WIFI_HOST_NAME[0])
-    {
-        WiFi.setHostname(WIFI_HOST_NAME);
-    }
-
-    // WiFi connect
-    WiFi.begin(); // Connect to credential in Hardware. (ESP32 saves the last Wifi connection)
-    int tcount = 10;
-    while(tcount-- > 0 && WiFi.status() != WL_CONNECTED)
-    {
-      delay(500);
-      M5.Display.printf(".");
-    }
-    if(WiFi.status() != WL_CONNECTED)
-    {
-        WB2_LOGE("Failed to connect WiFi");
-        abort();
-    }
-
-    // Configurate local time.
-    M5.Display.setCursor(0,0);
-    M5.Display.printf("Configurate time");
-    
-    configTime(gmtOffsetSec, daylightOffsetSec, ntpURL[0]);
-    std::tm t;
-    if(getLocalTime(&t))
-    {
-        WB2_LOGI("Configurate time : %4d/%02d/%02d (%d) %02d:%02d:%02d",
-                 t.tm_year + 1900,
-                 t.tm_mon + 1,
-                 t.tm_mday,
-                 t.tm_wday,
-                 t.tm_hour,
-                 t.tm_min,
-                 t.tm_sec);
-    }
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-
-    M5.Display.fillScreen(TFT_DARKGREEN);
-
-    // BLE
-    NimBLEDevice::init("");
-    xTaskCreateUniversal(wb2_advertise_task, "advertise_task", 8192, nullptr, 1, &advertiseTask, 1);
-    assert(advertiseTask);
-
-    // get advertise from WxBeacon2
-    auto ret = aq_talk::setup();
-    WB2_LOGD("aq_talk::setup : %d", ret);
+    // Avatar,Ticker and WeatherMap
     avatar = new Avatar();
     assert(avatar);
-
     ticker = new Ticker();
     assert(ticker);
+    ticker->setTitle(DEFAULT_TICKER_TITLE);
     ticker->setText(DEFAULT_TICKER_TEXT);
+    weatherMap = new WeatherMap();
+    assert(weatherMap);
+#ifdef ARDUINO_M5STACK_Core2
+    himawariScreen = new HimawariScreen();
+    assert(himawariScreen);
+#endif
+    progress = new ProgressIcon();
+    assert(progress);
 
-    wb2Client = new WxBeacon2Client();
-    assert(wb2Client);
+    // ConfigTime
+    configTime();
+    M5.Display.fillScreen(TFT_DARKGREEN);
+
+    // WxBeacon2 / Forecast / Himawari
+    initilizeAdvertise(advertisePriority, advertiseCore, callbackOnAdvertise);
+    jma::initializeForecast(forecastPriority, forecastCore, callbackOnForecast, callbackOnProgressForecast);
+#ifdef ARDUINO_M5STACK_Core2
+    himawari::initialize(himawariPriority, himawariCore, callbackOnHimawariImage, callbackOnProgressHimawari);
+#endif
     
-    getAdvertiseAsync();
-    while(busyAdvertise()) { delay(100); }
-    if(!updatedAdvertise)
+    // AquesTalk
+    auto ret = aq_talk::initialize(aqtalkPriority, aqtalkCore, callbackOnEndAqTalk);
+    WB2_LOGD("aq_talk::setup : %d", ret);
+
+    //
     {
-        WB2_LOGE("Not detected WxBeacon2");
-        abort();
+        goblib::datetime::LocalDateTime ldt = goblib::datetime::LocalDateTime::now();
+        WB2_LOGI("Configurated time : %s (%s)", ldt.toString().c_str(), M5S_WXBEACON2_TIMEZONE_LOCATION);
+        WB2_LOGI("End of setup free:%u internal:%u large:%u large internal:%u",
+                 esp_get_free_heap_size(), esp_get_free_internal_heap_size(),
+                 heap_caps_get_largest_free_block(MALLOC_CAP_DMA),
+                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        WB2_LOGI("PSRAM:size:%u free:%u", ESP.getPsramSize(), ESP.getFreePsram());
+        WB2_LOGI("ESP-IDF Version %d.%d.%d",
+                 (ESP_IDF_VERSION>>16) & 0xFF, (ESP_IDF_VERSION>>8)&0xFF, ESP_IDF_VERSION & 0xFF);
+        WB2_LOGI("gob_datetime Version %s", GOBLIB_DATETIME_VERSION_STRING);
+        WB2_LOGI("gob_json Version %s", GOB_JSON_VERSION_STRING);
     }
-    if(updatedAdvertise && advertiseData.format() != WxBeacon2::ADVFormat::E)
-    {
-        WB2_LOGE("WxBeacon2 beacon mode is not broadcast2");
-        ticker->setLevel(Ticker::Level::Purple);
-        ticker->setText(NOTICE_TICKER_TEXT);
-            
-    }
+    M5.Display.startWrite(); // Occupy DMA Bus
+
+    cpu_usage::initialize();
+
+    // Get advertise from WxBeacon2.
+    _requestAdvertise();
+
+    // Timer callback
+    requestTimerId = timer.setTimeout(M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC * 1000 /*ms*/, timerCallbackRequest);
+    talkTimerId = timer.setInterval(M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC * 1000 /*ms*/, talkRandom);
     
-    auto mem = esp_get_free_heap_size();
-    WB2_LOGV("end of setup %u", mem);
+    // Setting for hold time(ms)
+    M5.BtnA.setHoldThresh(1500);
+    M5.BtnB.setHoldThresh(1500);
+    M5.BtnC.setHoldThresh(1500);
 }
 
-namespace
-{
-    bool longPressA, longPressB,longPressC;
-}
-
+// Main loop
 void loop()
 {
+    auto start = millis();
     M5.update();
 
-    // WARNING : If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
-    /*
-      C button
-      long press : Set beacon mode to GeneralBroadcaster2 (for me)
-      press : show/hide ticker
-    */
-    if(!longPressC && M5.BtnC.pressedFor(1000))
+    if(canRequest())
     {
-        longPressC = true;
-        WB2_LOGI("Set beacon mode to broadcast mode");
-        auto b = changeBeaconMode();
-        if(b)
+        // WARNING : If the beacon mode is changed, all data stored in WxBeacon2 will be lost.
+        // WARNING : After the mode change, Abort system.
+        /*
+          C button
+          long press : Set beacon mode to GeneralBroadcaster2 for this application.
+          click : show/hide ticker
+        */
+        if(M5.BtnC.wasHold())
         {
-            ticker->setLevel(Ticker::Level::Blue);
-            ticker->setText(DEFAULT_TICKER_TEXT);
-            ticker->show(true);
-            getAdvertiseAsync();
+            WB2_LOGI("Set beacon mode to broadcast mode");
+            auto b = changeBeaconMode();
+            WB2_LOGI("Result : %d", b);
+            abort();
         }
-        WB2_LOGI("result : %d", b);
-    }
-    if(M5.BtnC.wasReleased())
-    {
-        if(!longPressC)
+        else if(M5.BtnC.wasClicked())
         {
             ticker->show(!ticker->isShow());
-            forceFace = true;
+            forceRender = true;
         }
-        longPressC = false;
-    }
-
-    /*
-      B button
-      long press : Set default setting for WNI aplication.
-      press : (none)
-    */
-    if(!longPressB && M5.BtnB.pressedFor(1000))
-    {
-        longPressB = true;
-        WB2_LOGI("Set default settins");
-        aq_talk::stopAquesTalk();
-        auto b = changeDefaultSetting();
-        if(b)
+        /*
+          B button
+          long press : Set default setting for WNI aplication.
+          click : (none)
+        */
+        if(M5.BtnB.wasHold())
         {
-            ticker->setLevel(Ticker::Level::Purple);
-            ticker->setText(NOTICE_TICKER_TEXT);
-            ticker->show(true);
+            WB2_LOGI("Set default settings");
+            aq_talk::stopAquesTalk();
+            auto b = changeDefaultSetting();
+            WB2_LOGI("Result : %d", b);
+            abort();
         }
-        WB2_LOGI("result : %d", b);
-    }
-    if(M5.BtnB.wasReleased())
-    {
-        if(!longPressB)
+        else if(M5.BtnB.wasClicked())
         {
-            // test_connect();
-            // test_getLatestPageData();
-            #if 0
-            // TEST
-            auto lv = ticker->level() + 1;
-            if(lv > 3) { lv = 0; }
-            ticker->setLevel((Ticker::Level)lv);
-            #endif
+            /* Nop */
         }
-        longPressB = false;
-    }
-
-    /*
-      A button
-      long press : (none)
-      press : Obtain data force.
-    */
-    if(!longPressA && M5.BtnA.pressedFor(1000))
-    {
-        longPressA = true;
-    }
-    if(M5.BtnA.wasReleased())
-    {
-        if(!longPressA)
+        /*
+          A button
+          long press : Obtain forecast force.
+          click : Obtain beacon data force.
+        */
+        if(M5.BtnA.wasHold())
         {
-            if(!busyAdvertise())
-            {
-                aq_talk::stopAquesTalk();
-                getAdvertiseAsync();
-            }
+            _requestForecast();
         }
-        longPressA = false;
+        else if(M5.BtnA.wasClicked())
+        {
+            _requestAdvertise();
+        }
     }
 
-    // Obtain data at intervals.
-    time_t t = time(nullptr);
-    if(!busyAdvertise() && lastUpdate > 0 && std::difftime(t, lastUpdate) >= TALKING_INTERVAL_SEC)
-    {
-        getAdvertiseAsync();
-    }
-
+    time_t now{};
+    std::time(&now);
+  
     // Play latest advertise data if exists.
     if(updatedAdvertise)
     {
+        resetRequestTimer();
         updatedAdvertise = false;
         playAdvertiseData(advertiseData);
-        auto de = advertiseData.getE();
-        if(de) {  ticker->setLevelWBGT(de->heatstroke()); }
     }
 
-    //
+    // Play latest forecast
+    if(updatedForecast)
+    {
+        resetRequestTimer();
+        updatedForecast = false;
+        playForecast();
+    }
+
+    // Draw himawari image
+#ifdef ARDUINO_M5STACK_Core2
+    if(updatedHimawari)
+    {
+        resetRequestTimer();
+        updatedHimawari = false;
+        drawHimawari();
+    }
+#endif
+
+    // Update
     avatar->pump();
     ticker->pump();
+#ifdef ARDUINO_M5STACK_Core2
+    progress->pump(busyAdvertise(), (jma::busyForecast() || himawari::busy()));
+#else
+    progress->pump(busyAdvertise(), jma::busyForecast());
+#endif
 
-    M5.Display.startWrite(); // Occupy DMA Bus
-    avatar->render(&M5.Display, forceFace); forceFace = false;
-    ticker->render(&M5.Display);
-    M5.Display.endWrite(); // Do render to display
+    // Rendering
+    {
+        weatherMap->render(&M5.Display, forceRender);
+#ifdef ARDUINO_M5STACK_Core2
+        himawariScreen->render(&M5.Display, forceRender);
+#endif
+        avatar->render(&M5.Display, forceRender);
+        ticker->render(&M5.Display);
+        progress->render(&M5.Display);
+        forceRender = false;
 
-    delay(1000/30); // Keep about 30 FPS
+#if !defined(NDEBUG) && defined(M5S_WXBEACON2_DEBUG_INFO)
+        M5.Display.setCursor(128, 120);
+# ifdef ARDUINO_M5STACK_Core2
+        M5.Display.printf("a:%d f:%d h:%d aq:%d s:%d",
+                          busyAdvertise(), jma::busyForecast(), himawari::busy(),
+                          aq_talk::busy(), M5.Speaker.isPlaying());
+# else
+        M5.Display.printf("a:%d f:%d aq:%d s:%d",
+                          busyAdvertise(), jma::busyForecast(), aq_talk::busy(), M5.Speaker.isPlaying());
+# endif
+        M5.Display.setCursor(128, 128);
+        M5.Display.printf("ih:%06u ilf:%06u",
+                          esp_get_free_internal_heap_size(),
+                          heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        M5.Display.setCursor(128, 136);
+        M5.Display.printf("c0:%03.1f c1:%03.1f", cpu_usage::cpu0(), cpu_usage::cpu1());
+        M5.Display.setCursor(128, 144);
+        M5.Display.printf("tmR:%02d tmT:%02d tmA:%02d", requestTimerId, talkTimerId, timer.getNumAvailableTimers());
+
+        cpu_usage::reset();
+#endif
+    }
+
+    timer.run();
+    
+    // Keep about 30 FPS.
+    auto end = millis();
+#ifdef M5S_WXBEACON2_DEBUG_INFO
+    if((end - start) > (1000/30))
+    {
+        WB2_LOGD("over:%lu", (end - start) - (1000/30));
+    }
+#endif
+    delay((end - start) >= (1000/30) ? 1 : (1000/30) - (end -start));
 }
-

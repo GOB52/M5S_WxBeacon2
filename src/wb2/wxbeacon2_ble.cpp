@@ -216,11 +216,12 @@ void WxBeacon2AdvertiseCallbacks::onResult(NimBLEAdvertisedDevice* device)
             detected = (c->_companyID == WxBeacon2::COMPANY_ID);
         }
 
-        WB2_LOGI("WxBeacon2 %s detected", detected ? "" : "NOT");
+        WB2_LOGI("WxBeacon2 detected? %d", detected);
 
         if(detected)
         {
             _address = device->getAddress();
+            WB2_LOGI("address: %s",_address.toString().c_str());
             NimBLEDevice::getScan()->stop();
         }
     }

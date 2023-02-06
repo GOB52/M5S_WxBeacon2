@@ -21,8 +21,9 @@ THE SOFTWARE.
 */
 
 #include "u8g2_font_profont22_tr.h"
+#include <pgmspace.h>
 
-const uint8_t u8g2_font_profont22_tr[1704] = 
+PROGMEM const uint8_t u8g2_font_profont22_tr[1704] =
   "`\0\4\4\4\5\4\5\5\14\26\0\374\16\374\20\376\2N\4\177\6\213 \5\0\20r!\11\342\30"
   "rxP\210\0\42\11fTs\20BO\4#\25\252\220r\221H\210\220\7E$\22\42\344A\21\211"
   "\204\10\1$$*\321q\22(\314\14\212\21\42\212\10!\42h\204\250C\247D\14\22BDH\11\21"

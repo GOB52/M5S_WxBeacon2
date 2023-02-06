@@ -31,9 +31,25 @@
 *.out
 *.app
 
+#Emacs
+\#*#
+
+#pio
+/.pio/
+
+# Doxygen
+/doc/html
 
 # resources
-ponko_face.cpp
-ponko_mouth_*.cpp
-logo.cpp
+/src/res/*
+!/src/res/resource.h
+!/src/res/u8g2_font_profont22_tr.*
+!/src/res/wifi.cpp
+!/src/res/bt.cpp
+!/src/res/jpmap.cpp
+!/src/res/dummy_face.cpp
+!/src/res/dummy_mo.cpp
+!/src/res/dummy_mc.cpp
+!/src/res/dummy_logo.cpp
+!/src/res/w???.cpp
 
