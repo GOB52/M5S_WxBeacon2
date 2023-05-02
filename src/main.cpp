@@ -6,12 +6,23 @@
   @file   main.cpp
   @brief  Program entry
 */
+#ifdef ARDUINO_M5STACK_Core2
+#include <M5ModuleDisplay.h>
+#endif
+#if defined(M5S_WXBEACON2_ENABLE_SD_UPDATER)
+#include <SD.h>
+#endif
 #include <M5Unified.h>
+#if defined(M5S_WXBEACON2_ENABLE_SD_UPDATER)
+#include <M5StackUpdater.h>
+#endif
 #include <M5GFX.h>
 #include <utility/M5Timer.h>
+
 #include <esp_system.h>
 #include <esp_bt.h> // esp_bt_controller_mem_release
 #include <esp_random.h> // esp_random() is hardware RNG. (No random seed initialization is required)
+#include <esp_idf_version.h>
 #include <WiFi.h>
 
 #include "utility.hpp"
@@ -29,23 +40,20 @@
 #include <gob_datetime_version.hpp>
 #include <gob_json_version.hpp>
 
-#ifdef ARDUINO_M5STACK_Core2
-#include "himawari/himawari.hpp"
-#include "himawari/himawari_task.hpp"
-#include "himawari/himawari_screen.hpp"
-#endif
-
 #include <ctime>
 #include <cstdio>
 #include <algorithm>
 #include <string>
 #include <map>
 
-#if __has_include (<esp_idf_version.h>)
-#include <esp_idf_version.h>
-#else // esp_idf_version.h has been introduced in Arduino 1.0.5 (ESP-IDF3.3)
-#define ESP_IDF_VERSION_VAL(major, minor, patch) ((major << 16) | (minor << 8) | (patch))
-#define ESP_IDF_VERSION ESP_IDF_VERSION_VAL(3,2,0)
+#ifdef ARDUINO_M5STACK_Core2
+#include "himawari/himawari.hpp"
+#include "himawari/himawari_task.hpp"
+#include "himawari/himawari_screen.hpp"
+#endif
+
+#ifndef TFCARD_CS_PIN
+# define TFCARD_CS_PIN (4)
 #endif
 
 using goblib::datetime::LocalTime;
@@ -214,17 +222,40 @@ struct ESP32RNG
 // Configurate Time by NTP.
 void configTime()
 {
+    // Check RTC if exists
+    if(M5.Rtc.isEnabled())
+    {
+        auto dt = M5.Rtc.getDateTime(); // GMT
+        if(dt.date.year > 2016)
+        {
+            WB2_LOGI("RTC time already set. (GMT) %04d/%02d/%2d %02d:%02d:%02d",
+                     dt.date.year, dt.date.month, dt.date.date,
+                     dt.time.hours, dt.time.minutes, dt.time.seconds);
+
+            // Set timezone
+            auto ptz = goblib::datetime::locationToPOSIX(M5S_WXBEACON2_TIMEZONE_LOCATION);
+            setenv("TZ",  ptz ? ptz : "NONE", 1);
+            tzset();
+            return;
+        }
+    }
+    WB2_LOGI("Configrate time");
+
     // WiFi connect
     WiFi.begin(); // Connect to credential in Hardware. (ESP32 saves the last WiFi connection)
-    int tcount = 20;
+    int tcount = 32;
     while(tcount-- > 0 && WiFi.status() != WL_CONNECTED)
     {
         M5.Display.printf(".");
-        delay(500);
+        delay(1000);
     }
     if(WiFi.status() != WL_CONNECTED)
     {
+        M5.Display.clear(TFT_RED);
+        M5.Display.setCursor(0,0);
+        M5.Display.printf("Failed to connect WiFi");
         WB2_LOGE("Failed to connect WiFi");
+        delay(1000);
         abort();
     }
 
@@ -236,10 +267,32 @@ void configTime()
     // waiting for time synchronization
     {
         std::tm discard{};
-        getLocalTime(&discard, 10 * 1000);
+        if(!getLocalTime(&discard, 10 * 1000 /* timeout */))
+        {
+            M5.Display.clear(TFT_BLUE);
+            M5.Display.setCursor(0,0);
+            M5.Display.printf("Failed to configTime");
+            WB2_LOGE("Failed to configTime");
+            delay(1000);
+            abort();
+        }
+        M5.Display.setCursor(0,0);
+        auto ldt = goblib::datetime::LocalDateTime::now();
+        M5.Display.printf("Configrated: %s", ldt.toString().c_str());
+        delay(1000);
     }
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
+
+    // Set RTC if exists
+    if(M5.Rtc.isEnabled())
+    {
+        time_t t = time(nullptr) + 1;
+        while(t > time(nullptr)) ;
+        M5.Rtc.setDateTime(gmtime(&t));
+        auto ldt = goblib::datetime::LocalDateTime::now();
+        WB2_LOGI("Set RTC:%s", ldt.toString().c_str());
+    }
 }
 
 //
@@ -640,14 +693,34 @@ void setup()
     // Incrase internal heap.
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 
-    //
-    M5.begin();  
+    // M5Unified
+    auto cfg = M5.config();
+    cfg.external_rtc = true; // Enable RTC if exists
+#if defined(__M5GFX_M5MODULEDISPLAY__)
+    cfg.module_display.logical_width = 320;
+    cfg.module_display.logical_height = 240;
+#endif
+    cfg.external_speaker.module_display = true;
+
+    M5.begin(cfg);
+#if defined(__M5GFX_M5MODULEDISPLAY__)
+    M5.setPrimaryDisplayType(m5::board_t::board_M5ModuleDisplay);
+#endif
+
     auto bd = M5.getBoard();
     WB2_LOGI("M5.board : %x", bd); // 2:M5Stack Basic/Gray 3:Core2
     if (M5.Display.width() < M5.Display.height())
     {
         M5.Display.setRotation(M5.Display.getRotation() ^ 1);
     }
+
+    // SD-Updater
+#if defined(M5S_WXBEACON2_ENABLE_SD_UPDATER)
+    checkSDUpdater(SD);
+    SD.end(); // No more use SD
+#endif
+
+    // Speaker
     auto scfg = M5.Speaker.config();
     scfg.task_priority = speakerPriority;
     scfg.task_pinned_core = speakerCore;
@@ -767,7 +840,9 @@ void loop()
         }
         else if(M5.BtnB.wasClicked())
         {
-            /* Nop */
+#ifdef ARDUINO_M5STACK_Core2
+            _requestHimawari();
+#endif
         }
         /*
           A button

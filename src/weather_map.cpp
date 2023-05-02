@@ -83,7 +83,10 @@ void drawWeatherIcon(m5gfx::M5GFX* dst, jma::officecode_t oc, jma::weathercode_t
     auto pos = positionTable.at(oc);
     //    WB2_LOGD("%d:%d:%d p:%d", oc, wc, ic, png != nullptr);
     auto ret = dst->drawPng(png, -1, pos->x * 2, pos->y * 2);
-    if(ret == 0) { WB2_LOGV("mem:%u", esp_get_free_internal_heap_size()); }
+    if(ret == 0)
+    {
+        WB2_LOGE("Failed to drawPn largeest internal:%u", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    }
 }
 //
 }
