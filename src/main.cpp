@@ -1,21 +1,21 @@
 /*!
-  Ponko avatar with WxBeacon2
-  Receive data from WxBeacon2 (https://jp.weathernews.com/)
-  [OEM OMRON 2JCIE-BL01]
+  Data from WxBeacon2 is received and displayed with avatars.
+  WxBeacon2 (https://jp.weathernews.com/) [OEM OMRON 2JCIE-BL01]
 
   @file   main.cpp
   @brief  Program entry
 */
-#ifdef ARDUINO_M5STACK_Core2
-#include <M5ModuleDisplay.h>
-#endif
 #if defined(M5S_WXBEACON2_ENABLE_SD_UPDATER)
-#include <SD.h>
+# pragma message "[WB2] Enable SD-Updater"
+# include <SD.h>
 #endif
+
 #include <M5Unified.h>
+
 #if defined(M5S_WXBEACON2_ENABLE_SD_UPDATER)
-#include <M5StackUpdater.h>
+# include <M5StackUpdater.h>
 #endif
+
 #include <M5GFX.h>
 #include <utility/M5Timer.h>
 
@@ -46,11 +46,9 @@
 #include <string>
 #include <map>
 
-#ifdef ARDUINO_M5STACK_Core2
 #include "himawari/himawari.hpp"
 #include "himawari/himawari_task.hpp"
 #include "himawari/himawari_screen.hpp"
-#endif
 
 #ifndef TFCARD_CS_PIN
 # define TFCARD_CS_PIN (4)
@@ -90,9 +88,7 @@ const char* ntpURLTable[] = { ntp0, ntp1, ntp2 }; // DON'T USE PROGMEM! (because
 Avatar* avatar;
 Ticker* ticker;
 WeatherMap* weatherMap;
-#ifdef ARDUINO_M5STACK_Core2
 HimawariScreen* himawariScreen;
-#endif
 ProgressIcon* progress;
 bool forceRender = true; // Force rendering all
 
@@ -172,12 +168,10 @@ OffsetDateTime requestForecastDatetime;
 bool updatedForecast = false;
 
 //
-#ifdef ARDUINO_M5STACK_Core2
 const uint8_t* himawariImage = nullptr;
 himawari::Band himawariBand;
 OffsetDateTime himawariDatetime;
 bool updatedHimawari = false;
-#endif
 
 // Ticker text
 PROGMEM const char DEFAULT_TICKER_TITLE[] = "Ponko";
@@ -298,13 +292,9 @@ void configTime()
 //
 bool canRequest()
 {
-#ifdef ARDUINO_M5STACK_Core2
-    return !himawari::busy() && !updatedHimawari &&
-#else
-    return 
-#endif
-            !busyAdvertise() && !updatedAdvertise &&
+    bool b = !busyAdvertise() && !updatedAdvertise &&
             !jma::busyForecast() && !updatedForecast;
+    return ESP.getPsramSize() ? (b && !himawari::busy() && !updatedHimawari) : b;
 }
 
 // --------------------------------
@@ -336,9 +326,7 @@ void playAdvertiseData(const WxBeacon2::AdvertiseData& data)
     forceRender = true;
     avatar->closeup();
     weatherMap->hide();
-#ifdef ARDUINO_M5STACK_Core2
     himawariScreen->hide();
-#endif    
     ticker->setTitle("WxBeacon2");
     aq_talk::stopAquesTalk();
 
@@ -507,9 +495,7 @@ void callbackOnForecast(const jma::officecode_t oc, const jma::Forecast& fc, con
 void playForecast()
 {
     forceRender = true;
-#ifdef ARDUINO_M5STACK_Core2
     himawariScreen->hide();
-#endif
     avatar->wipe(72, 32, 0.30f);
     weatherMap->setDatetime(requestForecastDatetime);
     
@@ -555,7 +541,6 @@ void playForecast()
 }
 
 // --------------------------------
-#ifdef ARDUINO_M5STACK_Core2
 // Request himawari image
 void _requestHimawari()
 {
@@ -626,7 +611,6 @@ void drawHimawari()
     ticker->setText(ts.c_str());
     ticker->setColor(Ticker::Color::Green);
 }
-#endif
 
 PROGMEM static const char t0[] = "minnasa--n,ponnbanwa,weza-roido'taipuei,airi'desu";
 PROGMEM static const char t1[] = "konsyu-no/saikaiwa,'kaniza";
@@ -655,11 +639,8 @@ void timerCallbackRequest()
 {
     if(canRequest())
     {
-#ifdef ARDUINO_M5STACK_Core2
-        _requestHimawari();
-#else
-        _requestAdvertise();
-#endif
+        if(ESP.getPsramSize()) { _requestHimawari();  }
+        else                   { _requestAdvertise(); }
         return;
     }
     // Retry
@@ -696,16 +677,7 @@ void setup()
     // M5Unified
     auto cfg = M5.config();
     cfg.external_rtc = true; // Enable RTC if exists
-#if defined(__M5GFX_M5MODULEDISPLAY__)
-    cfg.module_display.logical_width = 320;
-    cfg.module_display.logical_height = 240;
-#endif
-    cfg.external_speaker.module_display = true;
-
     M5.begin(cfg);
-#if defined(__M5GFX_M5MODULEDISPLAY__)
-    M5.setPrimaryDisplayType(m5::board_t::board_M5ModuleDisplay);
-#endif
 
     auto bd = M5.getBoard();
     WB2_LOGI("M5.board : %x", bd); // 2:M5Stack Basic/Gray 3:Core2
@@ -745,10 +717,8 @@ void setup()
     ticker->setText(DEFAULT_TICKER_TEXT);
     weatherMap = new WeatherMap();
     assert(weatherMap);
-#ifdef ARDUINO_M5STACK_Core2
     himawariScreen = new HimawariScreen();
     assert(himawariScreen);
-#endif
     progress = new ProgressIcon();
     assert(progress);
 
@@ -759,9 +729,7 @@ void setup()
     // WxBeacon2 / Forecast / Himawari
     initilizeAdvertise(advertisePriority, advertiseCore, callbackOnAdvertise);
     jma::initializeForecast(forecastPriority, forecastCore, callbackOnForecast, callbackOnProgressForecast);
-#ifdef ARDUINO_M5STACK_Core2
     himawari::initialize(himawariPriority, himawariCore, callbackOnHimawariImage, callbackOnProgressHimawari);
-#endif
     
     // AquesTalk
     auto ret = aq_talk::initialize(aqtalkPriority, aqtalkCore, callbackOnEndAqTalk);
@@ -785,9 +753,6 @@ void setup()
 
     cpu_usage::initialize();
 
-    // Get advertise from WxBeacon2.
-    _requestAdvertise();
-
     // Timer callback
     requestTimerId = timer.setTimeout(M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC * 1000 /*ms*/, timerCallbackRequest);
     talkTimerId = timer.setInterval(M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC * 1000 /*ms*/, talkRandom);
@@ -796,6 +761,9 @@ void setup()
     M5.BtnA.setHoldThresh(1500);
     M5.BtnB.setHoldThresh(1500);
     M5.BtnC.setHoldThresh(1500);
+
+    // Get advertise from WxBeacon2.
+    _requestAdvertise();
 }
 
 // Main loop
@@ -828,7 +796,7 @@ void loop()
         /*
           B button
           long press : Set default setting for WNI aplication.
-          click : (none)
+          click : Obtain himawari image forece (If device has PSRAM)
         */
         if(M5.BtnB.wasHold())
         {
@@ -840,9 +808,10 @@ void loop()
         }
         else if(M5.BtnB.wasClicked())
         {
-#ifdef ARDUINO_M5STACK_Core2
-            _requestHimawari();
-#endif
+            if(ESP.getPsramSize())
+            {
+                _requestHimawari();
+            }
         }
         /*
           A button
@@ -879,30 +848,22 @@ void loop()
     }
 
     // Draw himawari image
-#ifdef ARDUINO_M5STACK_Core2
     if(updatedHimawari)
     {
         resetRequestTimer();
         updatedHimawari = false;
         drawHimawari();
     }
-#endif
 
     // Update
     avatar->pump();
     ticker->pump();
-#ifdef ARDUINO_M5STACK_Core2
     progress->pump(busyAdvertise(), (jma::busyForecast() || himawari::busy()));
-#else
-    progress->pump(busyAdvertise(), jma::busyForecast());
-#endif
 
     // Rendering
     {
         weatherMap->render(&M5.Display, forceRender);
-#ifdef ARDUINO_M5STACK_Core2
         himawariScreen->render(&M5.Display, forceRender);
-#endif
         avatar->render(&M5.Display, forceRender);
         ticker->render(&M5.Display);
         progress->render(&M5.Display);
@@ -910,14 +871,10 @@ void loop()
 
 #if !defined(NDEBUG) && defined(M5S_WXBEACON2_DEBUG_INFO)
         M5.Display.setCursor(128, 120);
-# ifdef ARDUINO_M5STACK_Core2
         M5.Display.printf("a:%d f:%d h:%d aq:%d s:%d",
                           busyAdvertise(), jma::busyForecast(), himawari::busy(),
                           aq_talk::busy(), M5.Speaker.isPlaying());
-# else
-        M5.Display.printf("a:%d f:%d aq:%d s:%d",
-                          busyAdvertise(), jma::busyForecast(), aq_talk::busy(), M5.Speaker.isPlaying());
-# endif
+
         M5.Display.setCursor(128, 128);
         M5.Display.printf("ih:%06u ilf:%06u",
                           esp_get_free_internal_heap_size(),

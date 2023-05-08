@@ -1,9 +1,7 @@
 /*
   Request image of Weather Satellite "Himawari"
-  M5Stack Core2 only
+  WARNING : Works only with devices that have PSRAM (Need huge memories)
 */
-#ifdef ARDUINO_M5STACK_Core2
-
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -85,9 +83,9 @@ PROGMEM const char* areaTable[] =
 
 PROGMEM const char HIMAWARI_URI_FORMAT[] = "https://www.data.jma.go.jp/mscweb/data/himawari/img/%s/%s_%s_%02d%02d.jpg";
 // DigiCert Global Root CA of www.data.jma.go.jp.
-// Expire at Mon, 10 Nov 2031 00:00:00 GMT
+// If you get an X509 error, get the latest root certificate and rewrite this part.
 PROGMEM const char root_ca_ECC[] =
-        R"***(-----BEGIN CERTIFICATE-----
+R"***(-----BEGIN CERTIFICATE-----
 MIIDdzCCAl+gAwIBAgIBADANBgkqhkiG9w0BAQsFADBdMQswCQYDVQQGEwJKUDEl
 MCMGA1UEChMcU0VDT00gVHJ1c3QgU3lzdGVtcyBDTy4sTFRELjEnMCUGA1UECxMe
 U2VjdXJpdHkgQ29tbXVuaWNhdGlvbiBSb290Q0EyMB4XDTA5MDUyOTA1MDAzOVoX
@@ -295,4 +293,3 @@ bool request(const goblib::datetime::OffsetDateTime& odt, const Area area, const
 }
 //
 }
-#endif

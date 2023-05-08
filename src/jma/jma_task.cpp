@@ -19,6 +19,7 @@ jma::progress_callback callbackOnProgress;
 PROGMEM const char JMA_FORECAST_URI_FORMAT[] = "https://www.jma.go.jp/bosai/forecast/data/forecast/%06d.json";
 
 // DigiCert Global Root CA of www.jma.go.jp.
+// If you get an X509 error, get the latest root certificate and rewrite this part.
 PROGMEM const char root_ca_JMA[] =
 R"***(-----BEGIN CERTIFICATE-----
 MIIDdzCCAl+gAwIBAgIBADANBgkqhkiG9w0BAQsFADBdMQswCQYDVQQGEwJKUDEl

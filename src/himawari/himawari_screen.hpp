@@ -1,9 +1,9 @@
 /*
   Render himawari image
- */
-#ifdef ARDUINO_M5STACK_Core2
-# ifndef HIMAWARI_SCREEN_HPP
-# define HIMAWARI_SCREEN_HPP
+  WARNING : Works only with devices that have PSRAM (Need huge memories)
+*/
+#ifndef HIMAWARI_SCREEN_HPP
+#define HIMAWARI_SCREEN_HPP
 
 #include <M5GFX.h>
 #include <gob_datetime.hpp>
@@ -32,5 +32,4 @@ class HimawariScreen
     const uint8_t* _jpg{};
 };
 
-# endif
 #endif
