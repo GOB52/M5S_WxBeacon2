@@ -1,10 +1,9 @@
 /*
   Request image of Weather Satellite "Himawari"
-  M5Stack Core2 only
+  WARNING : Works only with devices that have PSRAM (Need huge memories)
 */
-#ifdef ARDUINO_M5STACK_Core2
-# ifndef HIMAWARI_TASK_HPP
-# define HIMAWARI_TASK_HPP
+#ifndef HIMAWARI_TASK_HPP
+#define HIMAWARI_TASK_HPP
 
 #include "himawari.hpp"
 #include <gob_datetime.hpp>
@@ -21,5 +20,4 @@ bool request(const goblib::datetime::OffsetDateTime& odt, const Area = Area::Jap
 
 //
 }
-# endif
 #endif

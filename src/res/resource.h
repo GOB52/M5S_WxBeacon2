@@ -33,95 +33,95 @@ extern const size_t  bt_bmp_len;
 extern const lgfx::U8g2font titleFont;
 extern const lgfx::U8g2font tickerFont;
 
-// Weather icon 2bpp png
-extern const uint8_t w100_png[];
-extern const size_t w100_png_len;
+// Weather icon jpg
+extern const unsigned char w100_jpg[];
+extern const unsigned int w100_jpg_len;
 
-extern const uint8_t w101_png[];
-extern const size_t w101_png_len;
+extern const unsigned char w101_jpg[];
+extern const unsigned int w101_jpg_len;
 
-extern const uint8_t w102_png[];
-extern const size_t w102_png_len;
+extern const unsigned char w102_jpg[];
+extern const unsigned int w102_jpg_len;
 
-extern const uint8_t w104_png[];
-extern const size_t w104_png_len;
+extern const unsigned char w104_jpg[];
+extern const unsigned int w104_jpg_len;
 
-extern const uint8_t w110_png[];
-extern const size_t w110_png_len;
+extern const unsigned char w110_jpg[];
+extern const unsigned int w110_jpg_len;
 
-extern const uint8_t w112_png[];
-extern const size_t w112_png_len;
+extern const unsigned char w112_jpg[];
+extern const unsigned int w112_jpg_len;
 
-extern const uint8_t w115_png[];
-extern const size_t w115_png_len;
+extern const unsigned char w115_jpg[];
+extern const unsigned int w115_jpg_len;
 
-extern const uint8_t w200_png[];
-extern const size_t w200_png_len;
+extern const unsigned char w200_jpg[];
+extern const unsigned int w200_jpg_len;
 
-extern const uint8_t w201_png[];
-extern const size_t w201_png_len;
+extern const unsigned char w201_jpg[];
+extern const unsigned int w201_jpg_len;
 
-extern const uint8_t w202_png[];
-extern const size_t w202_png_len;
+extern const unsigned char w202_jpg[];
+extern const unsigned int w202_jpg_len;
 
-extern const uint8_t w204_png[];
-extern const size_t w204_png_len;
+extern const unsigned char w204_jpg[];
+extern const unsigned int w204_jpg_len;
 
-extern const uint8_t w210_png[];
-extern const size_t w210_png_len;
+extern const unsigned char w210_jpg[];
+extern const unsigned int w210_jpg_len;
 
-extern const uint8_t w212_png[];
-extern const size_t w212_png_len;
+extern const unsigned char w212_jpg[];
+extern const unsigned int w212_jpg_len;
 
-extern const uint8_t w215_png[];
-extern const size_t w215_png_len;
+extern const unsigned char w215_jpg[];
+extern const unsigned int w215_jpg_len;
 
-extern const uint8_t w300_png[];
-extern const size_t w300_png_len;
+extern const unsigned char w300_jpg[];
+extern const unsigned int w300_jpg_len;
 
-extern const uint8_t w301_png[];
-extern const size_t w301_png_len;
+extern const unsigned char w301_jpg[];
+extern const unsigned int w301_jpg_len;
 
-extern const uint8_t w302_png[];
-extern const size_t w302_png_len;
+extern const unsigned char w302_jpg[];
+extern const unsigned int w302_jpg_len;
 
-extern const uint8_t w303_png[];
-extern const size_t w303_png_len;
+extern const unsigned char w303_jpg[];
+extern const unsigned int w303_jpg_len;
 
-extern const uint8_t w308_png[];
-extern const size_t w308_png_len;
+extern const unsigned char w308_jpg[];
+extern const unsigned int w308_jpg_len;
 
-extern const uint8_t w311_png[];
-extern const size_t w311_png_len;
+extern const unsigned char w311_jpg[];
+extern const unsigned int w311_jpg_len;
 
-extern const uint8_t w313_png[];
-extern const size_t w313_png_len;
+extern const unsigned char w313_jpg[];
+extern const unsigned int w313_jpg_len;
 
-extern const uint8_t w314_png[];
-extern const size_t w314_png_len;
+extern const unsigned char w314_jpg[];
+extern const unsigned int w314_jpg_len;
 
-extern const uint8_t w400_png[];
-extern const size_t w400_png_len;
+extern const unsigned char w400_jpg[];
+extern const unsigned int w400_jpg_len;
 
-extern const uint8_t w401_png[];
-extern const size_t w401_png_len;
+extern const unsigned char w401_jpg[];
+extern const unsigned int w401_jpg_len;
 
-extern const uint8_t w402_png[];
-extern const size_t w402_png_len;
+extern const unsigned char w402_jpg[];
+extern const unsigned int w402_jpg_len;
 
-extern const uint8_t w403_png[];
-extern const size_t w403_png_len;
+extern const unsigned char w403_jpg[];
+extern const unsigned int w403_jpg_len;
 
-extern const uint8_t w406_png[];
-extern const size_t w406_png_len;
+extern const unsigned char w406_jpg[];
+extern const unsigned int w406_jpg_len;
 
-extern const uint8_t w411_png[];
-extern const size_t w411_png_len;
+extern const unsigned char w411_jpg[];
+extern const unsigned int w411_jpg_len;
 
-extern const uint8_t w413_png[];
-extern const size_t w413_png_len;
+extern const unsigned char w413_jpg[];
+extern const unsigned int w413_jpg_len;
 
-extern const uint8_t w414_png[];
-extern const size_t w414_png_len;
+extern const unsigned char w414_jpg[];
+extern const unsigned int w414_jpg_len;
 
 #endif

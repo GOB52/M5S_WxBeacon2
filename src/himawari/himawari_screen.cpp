@@ -1,8 +1,7 @@
 /*
   Render himawari image
- */
-#ifdef ARDUINO_M5STACK_Core2
-
+  WARNING : Works only with devices that have PSRAM (Need huge memories)
+*/
 #include "himawari_screen.hpp"
 #include "wb2/wxbeacon2_log.hpp"
 #include "res/resource.h"
@@ -29,5 +28,3 @@ void HimawariScreen::render(m5gfx::M5GFX* dst, const bool force)
     dst->setFont(ofont);
     dst->setTextColor(TFT_WHITE, TFT_BLACK);
 }
-
-#endif

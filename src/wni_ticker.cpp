@@ -143,7 +143,7 @@ void Ticker::setText(const char* str)
     auto twid = _telop->width();
     if(_twidth > twid)
     {
-        auto allot = twid - _twidth % twid;
+        //auto allot = twid - _twidth % twid;
         int16_t left = 0;
         std::vector<String> append;
         for(auto& e : _str)

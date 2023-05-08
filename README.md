@@ -2,53 +2,118 @@
 
 https://user-images.githubusercontent.com/26270227/186464005-bfc6b1c4-3f5c-4e7f-b2bc-fb4b9d4b0df4.mp4
 
-|天気予報|気象衛星ひまわり画像|
-|---|---|
-|<img src="doc/forecast.jpg" alt="forecast" title="forecast" width="200" height="266">| <img src="doc/himawari.jpg" alt="himawari" title="himawari" width="200" height="266">|
+|天気予報|気象衛星ひまわり画像|WxBeacon2|WEATHEROID TypeA Airi ちゃん|
+|---|---|---|---|
+|<img src="doc/forecast.jpg" alt="forecast" title="forecast" width="200" height="266">| <img src="doc/himawari.jpg" alt="himawari" title="himawari" width="200" height="266">|<img src="https://weathernews.jp/smart/wxbeacon2/images/mainV.jpg" alt="WxBeacon2" title="WxBeacon2" width="188" height="98">|  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/WEATHEROID_TypeA_Airi.jpg/419px-WEATHEROID_TypeA_Airi.jpg" alt="ponko" title="ponko" width="105" height="212">|
 
-
-* WxBeacon2 から情報を取得し、ティッカーに表示、ポン子ちゃんアバターがアナウンスします。
-* 気象庁の天気予報 JSON データを取得し、全国の天気を表示、ポン子ちゃんアバターがアナウンスします。
-* **(Core2 のみ)** 気象衛星ひまわりの画像を取得し表示します。
 
 ## 概要
-[株式会社ウェザーニューズ](https://ja.wikipedia.org/wiki/%E3%82%A6%E3%82%A7%E3%82%B6%E3%83%BC%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%BA)(以下 WNI )による 24 時間お天気番組[ウェザーニュースLiVE](https://weathernews.jp/web910/) とリンクしたアプリケーション [ウェザーニュース](https://weathernews.jp/app/) では サンクスポイント 2000 pt以上取得すると[ウェザービーコン2](https://weathernews.jp/smart/wxbeacon2/)(以下 WxBeacon2 ) をゲットできます。(別途[有償購入](https://weathernews.jp/sorashop/)も可能)
+* WxBeacon2 から情報を取得し、ティッカーに表示、アバターがアナウンスします。
+* 気象庁の天気予報 JSON データを取得し、全国の天気を表示、アバターがアナウンスします。
+* **(PSRAM 搭載デバイスのみ)** 気象衛星ひまわりの画像を取得し表示します。
 
-|WxBeacon2|WEATHEROID TypeA Airi ちゃん|
-|---|---|
-|<img src="https://weathernews.jp/smart/wxbeacon2/images/mainV.jpg" alt="WxBeacon2" title="WxBeacon2" width="188" height="98">|  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/WEATHEROID_TypeA_Airi.jpg/419px-WEATHEROID_TypeA_Airi.jpg" alt="ponko" title="ponko" width="105" height="212">|
-
-
-M5Stack Basic, Gray, Core2 にて WxBeacon2 や気象庁からデータを取得し、
+M5Stack シリーズにて WxBeacon2 やインターネット経由でデータを取得し、
 [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) で喋らせるアプリケーションです。  
-どうせならウェザーニュースLiVE のマスコット、ポン子こと [WEATHEROID TypeA Airi](https://twitter.com/typea_airi) ちゃんに喋らせようという事で、アバターポン子ちゃんを作りました。
+どうせならウェザーニュースLiVE のマスコット、ポン子こと [WEATHEROID TypeA Airi](https://twitter.com/typea_airi) ちゃんに喋らせようという事で、アバターポン子ちゃんを作りました。  
+(ポン子ちゃんアバターこのリポジトリには含まれません、[こちら](#画像リソース)を参照して自作する必要があります)
 
+### WxBeacon2
 
-## 必要なもの
+[株式会社ウェザーニューズ](https://ja.wikipedia.org/wiki/%E3%82%A6%E3%82%A7%E3%82%B6%E3%83%BC%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%BA)(以下 WNI )による 24 時間お天気番組[ウェザーニュースLiVE](https://weathernews.jp/web910/) とリンクしたアプリケーション [ウェザーニュース](https://weathernews.jp/app/) では サンクスポイント 2000 pt 以上取得すると[ウェザービーコン2](https://weathernews.jp/smart/wxbeacon2/)(以下 WxBeacon2 ) をゲットできます。(別途[有償購入](https://weathernews.jp/sorashop/)も可能)
 
-* M5Stack  
-M5Stack Basic, Gray, Core2 のいずれか。
-
-* Wi-Fi接続可能な機器  
-ルータやモバイル Wi-Fi 等。
-
-* (持っていれば) WxBeacon2  
 実体は [OMRON 2JCIE-BL01](https://components.omron.com/jp-ja/products/sensors/2JCIE-BL) です。
 WxBeacon2 でなく当該製品でも動作すると思われます(手元に無いので未確認)。
 
-## コンパイル
+
+## 対応デバイス
+M5Stack Basic, Gray, Core2 等の Wi-Fi / BLE 通信が可能で、M5Unfied が動作する物。
+
+## ビルド
 
 ### 依存ライブラリ
-* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.3 or later (depends on [M5GFX](https://github.com/m5stack/M5GFX) 0.1.3 or later)
-* [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0 or later
-* [gob_json](https://github.com/GOB52/gob_json.git) 0.0.3 or later
-* [gob_datetime](https://github.com/GOB52/gob_datetime.git) 0.1.1 or later
-* [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) 2.21 or later  
+* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.6
+* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.6
+* [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0
+* [gob_json](https://github.com/GOB52/gob_json.git) 0.0.4
+* [gob_datetime](https://github.com/GOB52/gob_datetime.git) 0.1.1
+* [AquesTalk ESP32](https://www.a-quest.com/products/aquestalk_esp32.html) 2.21  
 AquesTalk ESP32 は [こちら](https://www.a-quest.com/download.html) よりダウンロード後、プロジェクトの lib フォルダ(無ければ作成)に展開してください。
 
-### 画像リソース
-初期状態ではダミーとして私が作った顔とロゴが使用されます。
+### ビルド種別によって依存
+* [M5Stack-SD-Updater]([https://github.com/tobozo/M5Stack-SD-Updater) 1.2.5
+
+### 動作設定
+
+* タイムゾーン設定  
+コンパイル時のオプション **M5S_WXBEACON2_TIMEZONE_LOCATION** (文字列) で指定します。  
+デフォルトは **"Asia/Tokyo"** です。(M5Stack 内部では POSIX 表記を用いて設定されます)  
+
+* データ自動取得間隔の設定  
+コンパイル時のオプション **M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC** (数値)で指定します。  
+デフォルトは 300 (5分間隔) です。  
+(Core2 ではひまわりの画像取得のインターバルとなります)
+
+* ランダムお喋り間隔の設定  
+コンパイル時のオプション **M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC** (数値)で指定します。  
+デフォルトは 60 (1分間隔) です。
+
+
+### Wi-Fi SSID password
+
+インターネット経由のデータ取得と時刻設定の為、Wi-Fi 接続を行います。
+また RTC 非搭載デバイスでは起動時に Wi-Fi 接続で NTP サーバーへの接続を行います。  
+(時刻の表示並びに、 WxBeacon2 のモードを出荷時に戻す際に、蓄積データの基準時刻を書き込む必要がある為)  
+
+前もって接続する Wi-Fi の SSID とパスワードをハードに書き込む必要があります。(WiFi.begin() を引数なしで呼ぶと保存されている情報を元に接続します)  
+
+SmartConfig 等を利用して SSID とパスワード書き込むか、 WiFi.begin(ssid, password); として一旦接続させるかして、ハードに情報を保存してください。  
+@tnkmasayuki さんによる記事 [Lang-ship](https://lang-ship.com/blog/work/esp32-wi-fi-setting/) が参考になるでしょう。
+
+### AquesTalk ESP32 ライセンス
+評価版では諸々の制限があります。ライセンスを取得した場合は、 src/aq_talk.cpp のライセンス部分を書き換えてください。
+
+```cpp
+bool initialize(const UBaseType_t priority, const BaseType_t core, aq_talk_callback f)
+{
+    if(!task_handle)
+    {
+        xTaskCreateUniversal(talk_task, "aq_talk_task", 4 * 1024, nullptr, priority, &task_handle, core);
+        callbackOnEnd = f;
+        return task_handle
+                && CAqTkPicoF_Init(workbuf, LEN_FRAME, "XXX-XXX-XXX") == 0; // ここにライセンスコード
+    }
+    return true;
+}
+```
+
+## 動作
+
+WxBeacon2 は通常(出荷時状態)、計測データを内部に蓄積しますが、このアプリケーションでは蓄積モードではなく、ブロードキャストモードを利用します。後述の操作方法(\*1)より、ブロードキャストモードに変更する必要があります。  
+**なおモードを変更した場合、蓄積したデータは全て失われる点、ウェザーニュースアプリとの連携ができなくなる点には注意です。**  
+**後述の操作方法(\*2)によって出荷時に状態を戻し、再びウェザーニュースアプリとの連携を取ることができるようになります。**
+モードがブロードキャストモードではない場合は、ティッカーが紫色となり、ティッカーにその旨表示されます。。  
+ブロードキャストモードであれば、起動時にデータを取得、ティッカーに表示してポン子ちゃんが喋ります。その際のティッカーの色は WBGT (熱中症危険度) のレベルに応じて青、黄、赤のいずれかの色となります。  
+気象衛星ひまわりの画像の受信と表示は、メモリを大量に消費する為 PSRAM 搭載デバイスのみの動作(\*3)となります。
+
+### 操作方法
+
+|ボタン| 長押し(1.5秒以上) | クリック |
+|---|---|---|
+|A | 全国の天気を取得して喋る [Wi-Fi 通信] | WxBeacon2のデータを取得して喋る[BLE 通信]|
+|B | (\*2)WxBeacon2 を出荷時の状態へ戻す [BLE 通信] | (\*3)ひまわりの画像の受信と表示(PSRAM 搭載デバイスのみ) [Wi-Fi 通信]|
+|C | (\*1)WxBeacon2 をブロードキャストモードに変更する [BLE 通信] | ティッカー表示の ON/OFF |
+
+各通信は排他的に動作するので、通信動作させるボタンは通信中は動作しません。  
+通信中は画面左下に Wi-Fi か BT マークが点滅表示されています。  
+<img src="doc/progress.jpg" alt="progress" title="progress" width="200" height="266">
+
+C 長押しでブロードキャストモードに上手くならなかった場合は、 B 長押しで出荷時に戻して再度試してください。
+
+
+## 画像リソース
 <img src="doc/dummy.jpg" alt="dummy" title="dummy" width="189" height="252">
+
+初期状態ではダミーとして私が作った顔とロゴが使用されます。
 
 **権利上の問題でポン子ちゃんの画像などは当リポジトリには含まれません。**  
 ポン子ちゃんや他の画像を使いたい場合、自分で以下の条件を満たす画像を作成し、ソースファイルとして共にコンパイルする必要があります。  
@@ -109,70 +174,6 @@ const size_t ponko_face_bmp_len = 38518;
 
 詳しくは [各リソースの定義](src/res/resource.h) を参照してください。
 
-
-### 動作設定
-
-* タイムゾーン設定  
-コンパイル時のオプション **M5S_WXBEACON2_TIMEZONE_LOCATION** (文字列) で指定します。  
-デフォルトは **"Asia/Tokyo"** です。(M5Stack 内部では POSIX 表記を用いて設定されます)  
-
-* データ自動取得間隔の設定  
-コンパイル時のオプション **M5S_WXBEACON2_AUTO_REQUEST_INTERVAL_SEC** (数値)で指定します。  
-デフォルトは 300 (5分間隔) です。  
-(Core2 ではひまわりの画像取得のインターバルとなります)
-
-* ランダムお喋り間隔の設定  
-コンパイル時のオプション **M5S_WXBEACON2_AUTO_TALK_INTERVAL_SEC** (数値)で指定します。  
-デフォルトは 60 (1分間隔) です。
-
-
-### Wi-Fi SSID password
-
-指定したタイムゾーンでの時刻取得の為、起動時に Wi-Fi 接続で NTP サーバーへの接続を行います。  
-(時刻の表示並びに、 WxBeacon2 のモードを出荷時に戻す際に、蓄積データの基準時刻を書き込む必要がある為)  
-前もって接続する Wi-Fi の SSID とパスワードをハードに書き込む必要があります。(WiFi.begin() を引数なしで呼ぶと保存されている情報を元に接続します)  
-SmartConfig 等を利用して SSID とパスワード書き込むか、 WiFi.begin(ssid, password); として一旦接続させるかして、ハードに情報を保存してください。  
-@tnkmasayuki さんによる記事 [Lang-ship](https://lang-ship.com/blog/work/esp32-wi-fi-setting/) が参考になるでしょう。
-
-### AquesTalk ESP32 ライセンス
-評価版では諸々の制限があります。ライセンスを取得した場合は、 src/aq_talk.cpp のライセンス部分を書き換えてください。
-
-```cpp
-bool initialize(const UBaseType_t priority, const BaseType_t core, aq_talk_callback f)
-{
-    if(!task_handle)
-    {
-        xTaskCreateUniversal(talk_task, "aq_talk_task", 4 * 1024, nullptr, priority, &task_handle, core);
-        callbackOnEnd = f;
-        return task_handle
-                && CAqTkPicoF_Init(workbuf, LEN_FRAME, "XXX-XXX-XXX") == 0; // ここにライセンスコード
-    }
-    return true;
-}
-```
-
-## 動作
-
-WxBeacon2 は通常(出荷時状態)、計測データを内部に蓄積しますが、このアプリケーションでは蓄積モードではなく、ブロードキャストモードを利用します。後述の操作方法(\*1)より、ブロードキャストモードに変更する必要があります。  
-**なおモードを変更した場合、蓄積したデータは全て失われる点、ウェザーニュースアプリとの連携ができなくなる点には注意です。**  
-**後述の操作方法(\*2)によって出荷時に状態を戻し、再びウェザーニュースアプリとの連携を取ることができるようになります。**
-モードがブロードキャストモードではない場合は、ティッカーが紫色となり、ティッカーにその旨表示されます。。  
-ブロードキャストモードであれば、起動時にデータを取得、ティッカーに表示してポン子ちゃんが喋ります。その際のティッカーの色は WBGT (熱中症危険度) のレベルに応じて青、黄、赤のいずれかの色となります。
-
-
-## 操作方法
-
-|ボタン| 長押し(1.5秒以上) | クリック |
-|---|---|---|
-|A | 全国の天気を取得して喋る [Wi-Fi 通信] | WxBeacon2のデータを取得して喋る[BLE 通信]|
-|B | (\*2)WxBeacon2 を出荷時の状態へ戻す [BLE 通信] | |
-|C | (\*1)WxBeacon2 をブロードキャストモードに変更する [BLE 通信] | ティッカー表示の ON/OFF |
-
-各通信は排他的に動作するので、通信動作させるボタンは通信中は動作しません。  
-通信中は画面左下に Wi-Fi か BT マークが点滅表示されています。  
-<img src="doc/progress.jpg" alt="progress" title="progress" width="200" height="266">
-
-C 長押しでブロードキャストモードに上手くならなかった場合は、 B 長押しで出荷時に戻して再度試してください。
 
 ## Zenn の記事
 - WxBeacon2 と M5Stack との NumBLE によるやり取り  
