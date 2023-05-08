@@ -40,7 +40,7 @@ M5Stack Basic, Gray, Core2 等の Wi-Fi / BLE 通信が可能で、M5Unfied が�
 AquesTalk ESP32 は [こちら](https://www.a-quest.com/download.html) よりダウンロード後、プロジェクトの lib フォルダ(無ければ作成)に展開してください。
 
 ### ビルド種別によって依存
-* [M5Stack-SD-Updater]([https://github.com/tobozo/M5Stack-SD-Updater) 1.2.5
+* [M5Stack-SD-Updater](https://github.com/tobozo/M5Stack-SD-Updater) 1.2.5
 
 ### 動作設定
 
