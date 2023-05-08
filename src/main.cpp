@@ -382,32 +382,34 @@ void _requestForecast()
     {
 #if 0
         // TEST
-        forecast.clear();
-        OffsetDateTime odt = OffsetDateTime::now();
-        requestForecastDatetime = odt;
-        const jma::officecode_t requestTable[] =
-                {
-                    16000, // Sapporo
-                    40000, // Sendai
-                    130000, // Tokyo
-                    150000, // Niigata
-                    170000, // Kanazawa
-                    230000, // Nagoya
-                    270000, // Oosaka
-                    340000, // Hiroshima
-                    390000, // Kochi
-                    400000, // Fukuoka
-                    471000, // Okinawa
-                };
-
-        auto& wv = forecast[odt];
-        jma::weathercode_t wc = 200;
-        for(auto& e : requestTable)
         {
-            wv.push_back({e, wc++, -12, 38});
+            forecast.clear();
+            OffsetDateTime odt = OffsetDateTime::now();
+            requestForecastDatetime = odt;
+            const jma::officecode_t requestTable[] =
+                    {
+                        16000, // Sapporo
+                        40000, // Sendai
+                        130000, // Tokyo
+                        150000, // Niigata
+                        170000, // Kanazawa
+                        230000, // Nagoya
+                        270000, // Oosaka
+                        340000, // Hiroshima
+                        390000, // Kochi
+                        400000, // Fukuoka
+                        471000, // Okinawa
+                    };
+
+            auto& wv = forecast[odt];
+            jma::weathercode_t wc = 200;
+            for(auto& e : requestTable)
+            {
+                wv.push_back({e, wc++, -12, 38});
+            }
+            updatedForecast = true;
+            return;
         }
-        updatedForecast = true;
-        return;
 #endif
 
         forecast.clear();

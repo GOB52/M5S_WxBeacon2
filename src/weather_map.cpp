@@ -39,53 +39,53 @@ std::map<jma::officecode_t, const Pos*> positionTable =
     { 471000, &ocPos[10] },
 };
 
-std::map<jma::weathercode_t, const uint8_t*> pngTable =
+std::map<jma::weathercode_t, const uint8_t*> iconTable =
 {
-    { 100, w100_png },
-    { 101, w101_png },
-    { 102, w102_png },
-    { 104, w104_png },
-    { 110, w110_png },
-    { 112, w112_png },
-    { 115, w115_png },
-    { 200, w200_png },
-    { 201, w201_png },
-    { 202, w202_png },
-    { 204, w204_png },
-    { 210, w210_png },
-    { 212, w212_png },
-    { 215, w215_png },
-    { 300, w300_png },
-    { 301, w301_png },
-    { 302, w302_png },
-    { 303, w303_png },
-    { 308, w308_png },
-    { 311, w311_png },
-    { 313, w313_png },
-    { 314, w314_png },
-    { 400, w400_png },
-    { 401, w401_png },
-    { 402, w402_png },
-    { 403, w403_png },
-    { 406, w406_png },
-    { 411, w411_png },
-    { 413, w413_png },
-    { 414, w414_png },
+    { 100, w100_jpg },
+    { 101, w101_jpg },
+    { 102, w102_jpg },
+    { 104, w104_jpg },
+    { 110, w110_jpg },
+    { 112, w112_jpg },
+    { 115, w115_jpg },
+    { 200, w200_jpg },
+    { 201, w201_jpg },
+    { 202, w202_jpg },
+    { 204, w204_jpg },
+    { 210, w210_jpg },
+    { 212, w212_jpg },
+    { 215, w215_jpg },
+    { 300, w300_jpg },
+    { 301, w301_jpg },
+    { 302, w302_jpg },
+    { 303, w303_jpg },
+    { 308, w308_jpg },
+    { 311, w311_jpg },
+    { 313, w313_jpg },
+    { 314, w314_jpg },
+    { 400, w400_jpg },
+    { 401, w401_jpg },
+    { 402, w402_jpg },
+    { 403, w403_jpg },
+    { 406, w406_jpg },
+    { 411, w411_jpg },
+    { 413, w413_jpg },
+    { 414, w414_jpg },
 };
 
 // WARNING : Keep largets free heap 50K for decode PNG.
 void drawWeatherIcon(m5gfx::M5GFX* dst, jma::officecode_t oc, jma::weathercode_t wc)
 {
     auto ic = jma::weatherCodeToIcon(wc);
-    if(!ic || pngTable.count(ic) == 0 || positionTable.count(oc) == 0) { return; }
+    if(!ic || iconTable.count(ic) == 0 || positionTable.count(oc) == 0) { return; }
 
-    auto png = pngTable.at(ic);
+    auto jpg = iconTable.at(ic);
     auto pos = positionTable.at(oc);
     //    WB2_LOGD("%d:%d:%d p:%d", oc, wc, ic, png != nullptr);
-    auto ret = dst->drawPng(png, -1, pos->x * 2, pos->y * 2);
+    auto ret = dst->drawJpg(jpg, -1, pos->x * 2, pos->y * 2);
     if(ret == 0)
     {
-        WB2_LOGE("Failed to drawPn largeest internal:%u", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        WB2_LOGE("Failed to drawJpg largeest internal:%u", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     }
 }
 //
