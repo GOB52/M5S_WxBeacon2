@@ -23,6 +23,7 @@
 #include <esp_bt.h> // esp_bt_controller_mem_release
 #include <esp_random.h> // esp_random() is hardware RNG. (No random seed initialization is required)
 #include <esp_idf_version.h>
+#include <esp_sntp.h>
 #include <WiFi.h>
 
 #include "utility.hpp"
@@ -258,10 +259,21 @@ void configTime()
     WB2_LOGI("tz:[%s] [%s] [%s] [%s]", ptz ? ptz : "NONE", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
 
     configTzTime(ptz ? ptz : "", ntpURLTable[0], ntpURLTable[1], ntpURLTable[2]);
+
     // waiting for time synchronization
+    int32_t retry{10};    
+    sntp_sync_status_t st;
+    while( ((st = sntp_get_sync_status()) == SNTP_SYNC_STATUS_RESET) && --retry >= 0)
+    {
+        M5_LOGI("   ...sync in progress");
+        delay(1000);
+    }
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+
     {
         std::tm discard{};
-        if(!getLocalTime(&discard, 10 * 1000 /* timeout */))
+        if((st != SNTP_SYNC_STATUS_COMPLETED) || !getLocalTime(&discard, 10 * 1000 /* timeout */))
         {
             M5.Display.clear(TFT_BLUE);
             M5.Display.setCursor(0,0);
@@ -275,8 +287,6 @@ void configTime()
         M5.Display.printf("Configrated: %s", ldt.toString().c_str());
         delay(1000);
     }
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
 
     // Set RTC if exists
     if(M5.Rtc.isEnabled())
