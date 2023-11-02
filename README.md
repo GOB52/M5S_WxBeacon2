@@ -31,8 +31,8 @@ M5Stack Basic, Gray, Core2 等の Wi-Fi / BLE 通信が可能で、M5Unfied が�
 ## ビルド
 
 ### 依存ライブラリ
-* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.6
-* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.6
+* [M5Unified](https://github.com/m5stack/M5Unified) 0.1.10
+* [M5GFX](https://github.com/m5stack/M5GFX) 0.1.10
 * [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) 1.4.0
 * [gob_json](https://github.com/GOB52/gob_json.git) 0.0.4
 * [gob_datetime](https://github.com/GOB52/gob_datetime.git) 0.1.1
